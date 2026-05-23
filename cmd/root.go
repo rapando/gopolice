@@ -25,6 +25,7 @@ performance profiling, tests and git blame, then opens an interactive web UI.`,
 	root.AddCommand(NewConfigCommand())
 	root.AddCommand(NewScanCommand())
 	root.AddCommand(NewServeCommand())
+	root.AddCommand(NewHistoryCommand())
 
 	return root
 }

@@ -1,8 +1,10 @@
 package scanner
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -46,7 +48,7 @@ func (p *Pipeline) Run(ctx context.Context, cfg *config.Config, progress chan<- 
 		Issues:   make([]model.Issue, 0),
 	}
 
-	enabledScanners := p.filterEnabled(cfg)
+	enabledScanners := p.filterEnabled()
 
 	for _, s := range enabledScanners {
 		select {
@@ -96,11 +98,14 @@ func (p *Pipeline) Run(ctx context.Context, cfg *config.Config, progress chan<- 
 
 	result.Duration = time.Since(start)
 	p.normalizePaths(result, cfg)
+	if result.ProjectName == "" {
+		result.ProjectName = moduleName(cfg.TargetDir)
+	}
 	return result, nil
 }
 
 func (p *Pipeline) normalizePaths(result *model.ScanResult, cfg *config.Config) {
-	projectDir := cfg.Project.Path
+	projectDir := cfg.TargetDir
 	if projectDir == "" {
 		projectDir = "."
 	}
@@ -128,41 +133,25 @@ func (p *Pipeline) normalizePaths(result *model.ScanResult, cfg *config.Config) 
 	}
 }
 
-func (p *Pipeline) filterEnabled(cfg *config.Config) []Scanner {
-	toggles := cfg.Scan.Scanners
-	var enabled []Scanner
+func (p *Pipeline) filterEnabled() []Scanner {
+	return p.scanners
+}
 
-	for _, s := range p.scanners {
-		switch s.Name() {
-		case "lint":
-			if toggles.Lint {
-				enabled = append(enabled, s)
-			}
-		case "security":
-			if toggles.Security {
-				enabled = append(enabled, s)
-			}
-		case "tests":
-			if toggles.Tests {
-				enabled = append(enabled, s)
-			}
-		case "profile":
-			if toggles.Profile && !cfg.Scan.Quick {
-				enabled = append(enabled, s)
-			}
-		case "git":
-			if toggles.Git {
-				enabled = append(enabled, s)
-			}
-		case "complexity":
-			if toggles.Complexity {
-				enabled = append(enabled, s)
-			}
-		case "filestats":
-			enabled = append(enabled, s)
-		default:
-			enabled = append(enabled, s)
+func moduleName(dir string) string {
+	if dir == "" {
+		dir = "."
+	}
+	f, err := os.Open(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		return filepath.Base(dir)
+	}
+	defer f.Close()
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		line := strings.TrimSpace(s.Text())
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
 		}
 	}
-	return enabled
+	return filepath.Base(dir)
 }

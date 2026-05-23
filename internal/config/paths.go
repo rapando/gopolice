@@ -17,14 +17,6 @@ func GlobalConfigPath() string {
 	return filepath.Join(GlobalConfigDir(), "config.yaml")
 }
 
-func ProjectConfigDir() string {
-	return ".gopolice"
-}
-
-func ProjectConfigPath() string {
-	return filepath.Join(ProjectConfigDir(), "config.yaml")
-}
-
 func IsInsideGoProject() bool {
 	root := findGoProjectRoot()
 	return root != ""

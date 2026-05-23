@@ -167,6 +167,41 @@ export function getDeps(): Promise<Dependency[]> {
   return request<Dependency[]>('/api/results/deps')
 }
 
+export interface HistoryEntry {
+  id: string
+  timestamp: string
+  project_id: string
+  project_name: string
+  total_issues: number
+  total_tests: number
+  duration: number
+  grade?: string
+}
+
+export interface DiffResult {
+  from: string
+  to: string
+  resolved: Issue[]
+  new: Issue[]
+  unchanged: Issue[]
+}
+
+export function getHistoryList(): Promise<HistoryEntry[]> {
+  return request('/api/history')
+}
+
+export function getHistoryEntry(id: string): Promise<ScanResult> {
+  return request(`/api/history/entry/${encodeURIComponent(id)}`)
+}
+
+export function getHistoryDiff(from: string, to: string): Promise<DiffResult> {
+  return request(`/api/history/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+}
+
+export function deleteHistoryEntry(id: string): Promise<{ status: string }> {
+  return request(`/api/history/entry/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
 export function getVersion(): Promise<{ version: string }> {
   return request('/api/version')
 }
@@ -187,16 +222,8 @@ export function getGlobalConfig(): Promise<any> {
   return request('/api/config/global')
 }
 
-export function getProjectConfig(): Promise<any> {
-  return request('/api/config/project')
-}
-
 export function updateGlobalConfig(cfg: any): Promise<{ status: string }> {
   return request('/api/config/global', { method: 'PUT', body: JSON.stringify(cfg) })
-}
-
-export function updateProjectConfig(cfg: any): Promise<{ status: string }> {
-  return request('/api/config/project', { method: 'PUT', body: JSON.stringify(cfg) })
 }
 
 export function applyFix(id: string): Promise<FixResult> {
@@ -237,6 +264,25 @@ export function severityBadge(s: string): string {
     case 'warning': return 'bg-yellow-100 text-yellow-800'
     default: return 'bg-blue-100 text-blue-800'
   }
+}
+
+export function computeGrade(issues: { severity: string }[]): string {
+  let score = 0
+  for (const iss of issues) {
+    if (iss.severity === 'error') score += 10
+    else if (iss.severity === 'warning') score += 3
+    else score += 1
+  }
+  if (score === 0) return 'A'
+  if (score <= 15) return 'B'
+  if (score <= 40) return 'C'
+  if (score <= 80) return 'D'
+  return 'F'
+}
+
+export function durationStr(d: number): string {
+  if (d < 1_000_000_000) return (d / 1_000_000).toFixed(0) + 'ms'
+  return (d / 1_000_000_000).toFixed(2) + 's'
 }
 
 export function categoryColor(c: string): string {

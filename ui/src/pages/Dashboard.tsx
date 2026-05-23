@@ -1,4 +1,4 @@
-import { ScanResult } from '../api/client'
+import { ScanResult, computeGrade } from '../api/client'
 
 interface Props {
   result: ScanResult | null
@@ -50,6 +50,12 @@ export default function Dashboard({ result, scanLog, scanning, onScan }: Props) 
   const passRate = testResult && testResult.total.total > 0
     ? ((testResult.total.passed / testResult.total.total) * 100).toFixed(1)
     : null
+  const grade = computeGrade(result.issues)
+  const gradeColor = grade === 'A' ? 'border-l-green-500'
+    : grade === 'B' ? 'border-l-teal-500'
+    : grade === 'C' ? 'border-l-yellow-500'
+    : grade === 'D' ? 'border-l-orange-500'
+    : 'border-l-red-500'
 
   return (
     <div className="max-w-6xl mx-auto p-8">
@@ -65,7 +71,8 @@ export default function Dashboard({ result, scanLog, scanning, onScan }: Props) 
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <Metric label="Grade" value={grade} color={gradeColor} />
         <Metric label="Bugs" value={errCount} color="border-l-red-500" sub="Errors" />
         <Metric label="Vulnerabilities" value={result.issues.filter(i => i.category === 'security').length} color="border-l-orange-500" sub="Security" />
         <Metric label="Code Smells" value={warnCount + infoCount} color="border-l-yellow-500" sub="Warnings + Info" />

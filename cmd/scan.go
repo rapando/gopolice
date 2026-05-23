@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,16 +12,13 @@ import (
 
 	"github.com/rapando/gopolice/internal/api"
 	"github.com/rapando/gopolice/internal/config"
+	"github.com/rapando/gopolice/internal/history"
 	"github.com/rapando/gopolice/internal/scanner"
 	"github.com/spf13/cobra"
 )
 
 func NewScanCommand() *cobra.Command {
-	var quick bool
-	var profile bool
-	var bench bool
 	var noOpen bool
-	var outputFormat string
 
 	cmd := &cobra.Command{
 		Use:   "scan",
@@ -35,39 +31,18 @@ tests, git blames and more, then opens an interactive web UI report.`,
 				return fmt.Errorf("load config: %w", err)
 			}
 
-			if quick {
-				cfg.Scan.Quick = true
-			}
-			if profile {
-				cfg.Scan.Profile = true
-			}
-			if bench {
-				cfg.Scan.Bench = true
-			}
+			cfg.TargetDir = "."
 
-			projectDir := cfg.Project.Path
-			if projectDir == "" {
-				projectDir = "."
-			}
-
-			if outputFormat != "" {
-				return runScanAndExport(cfg, projectDir, outputFormat)
-			}
-
-			return runScanAndServe(c, cfg, projectDir, noOpen)
+			return runScanAndServe(c, cfg, noOpen)
 		},
 	}
 
-	cmd.Flags().BoolVarP(&quick, "quick", "q", false, "Skip expensive scans (profile, complexity)")
-	cmd.Flags().BoolVar(&profile, "profile", false, "Run CPU/memory profiling")
-	cmd.Flags().BoolVar(&bench, "bench", false, "Run benchmarks")
 	cmd.Flags().BoolVarP(&noOpen, "no-open", "n", false, "Don't open browser automatically")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "", "Export format (json) — skip UI")
 
 	return cmd
 }
 
-func runScanAndServe(c *cobra.Command, cfg *config.Config, projectDir string, noOpen bool) error {
+func runScanAndServe(c *cobra.Command, cfg *config.Config, noOpen bool) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -100,8 +75,12 @@ func runScanAndServe(c *cobra.Command, cfg *config.Config, projectDir string, no
 		}
 		c.PrintErr(fmt.Sprintf("Scan complete: %d issues found in %v\n", len(result.Issues), result.Duration))
 
+		if err := history.Save(cfg.TargetDir, result); err != nil {
+			c.PrintErr(fmt.Sprintf("history save: %v\n", err))
+		}
+
 		server := api.NewServer(cfg, uiFS, GetVersion())
-		uiPort := cfg.UI.Port
+		uiPort := cfg.Port
 		if uiPort == 0 {
 			uiPort = 9393
 		}
@@ -124,34 +103,6 @@ func runScanAndServe(c *cobra.Command, cfg *config.Config, projectDir string, no
 	}()
 
 	<-resultCh
-	return nil
-}
-
-func runScanAndExport(cfg *config.Config, projectDir, format string) error {
-	ctx := context.Background()
-	p := scanner.NewDefaultPipeline()
-	progress := make(chan scanner.ProgressEvent, 100)
-
-	go func() {
-		for range progress {
-		}
-	}()
-
-	result, err := p.Run(ctx, cfg, progress)
-	if err != nil {
-		return fmt.Errorf("scan failed: %w", err)
-	}
-
-	switch format {
-	case "json":
-		data, err := json.MarshalIndent(result, "", "  ")
-		if err != nil {
-			return err
-		}
-		fmt.Println(string(data))
-	default:
-		return fmt.Errorf("unsupported export format: %s", format)
-	}
 	return nil
 }
 

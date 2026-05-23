@@ -24,7 +24,7 @@ func (s *GitScanner) Name() string {
 
 func (s *GitScanner) Run(ctx context.Context, cfg *config.Config, progress chan<- ProgressEvent) (*Result, error) {
 	start := time.Now()
-	projectDir := cfg.Project.Path
+	projectDir := cfg.TargetDir
 	if projectDir == "" {
 		projectDir = "."
 	}
