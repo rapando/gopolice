@@ -62,6 +62,8 @@ type Test struct {
 	Status   string        `json:"status"`
 	Duration time.Duration `json:"duration"`
 	Output   string        `json:"output,omitempty"`
+	File     string        `json:"file,omitempty"`
+	Line     int           `json:"line,omitempty"`
 }
 
 type TestSummary struct {

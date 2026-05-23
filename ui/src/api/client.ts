@@ -54,6 +54,8 @@ export interface Test {
   status: string
   duration: number
   output: string
+  file?: string
+  line?: number
 }
 
 export interface TestSummary {
@@ -148,6 +150,10 @@ export function getDeps(): Promise<Dependency[]> {
   return request<Dependency[]>('/api/results/deps')
 }
 
+export function getVersion(): Promise<{ version: string }> {
+  return request('/api/version')
+}
+
 export function healthCheck(): Promise<{ status: string }> {
   return request('/api/health')
 }
@@ -158,6 +164,22 @@ export function triggerScan(): Promise<{ status: string }> {
 
 export function getConfig(): Promise<any> {
   return request('/api/config')
+}
+
+export function getGlobalConfig(): Promise<any> {
+  return request('/api/config/global')
+}
+
+export function getProjectConfig(): Promise<any> {
+  return request('/api/config/project')
+}
+
+export function updateGlobalConfig(cfg: any): Promise<{ status: string }> {
+  return request('/api/config/global', { method: 'PUT', body: JSON.stringify(cfg) })
+}
+
+export function updateProjectConfig(cfg: any): Promise<{ status: string }> {
+  return request('/api/config/project', { method: 'PUT', body: JSON.stringify(cfg) })
 }
 
 export function applyFix(id: string): Promise<FixResult> {

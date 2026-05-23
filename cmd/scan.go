@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/rapando/gopolice/internal/api"
@@ -98,7 +99,7 @@ func runScanAndServe(c *cobra.Command, cfg *config.Config, projectDir string, no
 		}
 		c.PrintErr(fmt.Sprintf("Scan complete: %d issues found in %v\n", len(result.Issues), result.Duration))
 
-		server := api.NewServer(cfg, uiFS)
+		server := api.NewServer(cfg, uiFS, GetVersion())
 		uiPort := cfg.UI.Port
 		if uiPort == 0 {
 			uiPort = 9393
@@ -154,17 +155,29 @@ func runScanAndExport(cfg *config.Config, projectDir, format string) error {
 }
 
 func openBrowser(url string) {
-	switch {
-	case hasTool("open"):
+	if runtime.GOOS == "darwin" && hasTool("osascript") {
+		script := fmt.Sprintf(`try
+	tell application "System Events"
+		set frontApp to bundle identifier of (first application process whose frontmost is true)
+	end tell
+	tell application id frontApp
+		activate
+		open location %q
+	end tell
+end try`, url)
+		if execSilent("osascript", "-e", script) == nil {
+			return
+		}
+	}
+	if hasTool("open") {
 		execSilent("open", url)
-	case hasTool("xdg-open"):
+	} else if hasTool("xdg-open") {
 		execSilent("xdg-open", url)
 	}
 }
 
-func execSilent(name string, args ...string) {
-	cmd := exec.Command(name, args...)
-	cmd.Run()
+func execSilent(name string, args ...string) error {
+	return exec.Command(name, args...).Run()
 }
 
 func hasTool(name string) bool {

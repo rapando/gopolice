@@ -4,7 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -57,6 +62,7 @@ func (s *TestScanner) Run(ctx context.Context, cfg *config.Config, progress chan
 		}
 	}
 
+	s.locateTestFileLocations(projectDir, testResult)
 	issues := s.issuesFromTestResult(testResult)
 
 	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Ran %d tests, %d passed, %d failed", testResult.Total.Total, testResult.Total.Passed, testResult.Total.Failed), Elapsed: time.Since(start)}
@@ -230,6 +236,79 @@ func parseCoverageOutput(output string) *model.TestResult {
 		}
 	}
 	return result
+}
+
+var fileLineRe = regexp.MustCompile(`^(.+?\.go):(\d+):`)
+
+func (s *TestScanner) locateTestFileLocations(projectDir string, result *model.TestResult) {
+	modPath := ""
+	if f, err := os.ReadFile(filepath.Join(projectDir, "go.mod")); err == nil {
+		for _, line := range strings.Split(string(f), "\n") {
+			if strings.HasPrefix(line, "module ") {
+				modPath = strings.TrimSpace(strings.TrimPrefix(line, "module"))
+				break
+			}
+		}
+	}
+
+	fset := token.NewFileSet()
+
+	for pi := range result.Packages {
+		pkg := &result.Packages[pi]
+		pkgImportPath := pkg.Name
+		relDir := pkgImportPath
+		if modPath != "" && strings.HasPrefix(pkgImportPath, modPath) {
+			relDir = strings.TrimPrefix(pkgImportPath, modPath+"/")
+		}
+		pkgDir := filepath.Join(projectDir, relDir)
+
+		testFileLocations := make(map[string]struct{ file string; line int })
+
+		entries, err := os.ReadDir(pkgDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_test.go") {
+				continue
+			}
+			f, err := parser.ParseFile(fset, filepath.Join(pkgDir, entry.Name()), nil, parser.ParseComments)
+			if err != nil {
+				continue
+			}
+			for _, decl := range f.Decls {
+				fd, ok := decl.(*ast.FuncDecl)
+				if !ok || fd.Recv != nil {
+					continue
+				}
+				if !strings.HasPrefix(fd.Name.Name, "Test") {
+					continue
+				}
+				pos := fset.Position(fd.Pos())
+				relPath, _ := filepath.Rel(projectDir, pos.Filename)
+				testFileLocations[fd.Name.Name] = struct{ file string; line int }{relPath, pos.Line}
+			}
+		}
+
+		for ti := range pkg.Tests {
+			t := &pkg.Tests[ti]
+			if t.File != "" {
+				continue
+			}
+			if t.Output != "" {
+				if m := fileLineRe.FindStringSubmatch(t.Output); m != nil {
+					relPath, _ := filepath.Rel(projectDir, m[1])
+					t.File = relPath
+					t.Line, _ = strconv.Atoi(m[2])
+					continue
+				}
+			}
+			if loc, ok := testFileLocations[t.Name]; ok {
+				t.File = loc.file
+				t.Line = loc.line
+			}
+		}
+	}
 }
 
 func (s *TestScanner) issuesFromTestResult(tr *model.TestResult) []model.Issue {
