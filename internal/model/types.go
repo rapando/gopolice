@@ -79,11 +79,28 @@ type Dependency struct {
 	Indirect bool   `json:"indirect"`
 }
 
+type AuthorInfo struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Count int    `json:"count"`
+}
+
+type CommitInfo struct {
+	Hash     string    `json:"hash"`
+	Date     time.Time `json:"date"`
+	Author   string    `json:"author"`
+	Email    string    `json:"email"`
+	Message  string    `json:"message"`
+	Verified string    `json:"verified"`
+}
+
 type GitInfo struct {
-	Branch       string `json:"branch"`
-	Commit       string `json:"commit"`
-	CommitTime   time.Time `json:"commit_time"`
-	AuthorCount  int    `json:"author_count"`
+	Branch      string       `json:"branch"`
+	Commit      string       `json:"commit"`
+	CommitTime  time.Time    `json:"commit_time"`
+	AuthorCount int          `json:"author_count"`
+	Authors     []AuthorInfo `json:"authors,omitempty"`
+	Commits     []CommitInfo `json:"commits,omitempty"`
 }
 
 type FileStat struct {

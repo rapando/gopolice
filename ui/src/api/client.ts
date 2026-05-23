@@ -71,11 +71,28 @@ export interface Dependency {
   indirect: boolean
 }
 
+export interface AuthorInfo {
+  name: string
+  email: string
+  count: number
+}
+
+export interface CommitInfo {
+  hash: string
+  date: string
+  author: string
+  email: string
+  message: string
+  verified: string
+}
+
 export interface GitInfo {
   branch: string
   commit: string
   commit_time: string
   author_count: number
+  authors?: AuthorInfo[]
+  commits?: CommitInfo[]
 }
 
 export interface FileStat {
