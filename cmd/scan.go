@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 
 	"github.com/rapando/gopolice/internal/api"
@@ -156,16 +157,7 @@ func runScanAndExport(cfg *config.Config, projectDir, format string) error {
 
 func openBrowser(url string) {
 	if runtime.GOOS == "darwin" && hasTool("osascript") {
-		script := fmt.Sprintf(`try
-	tell application "System Events"
-		set frontApp to bundle identifier of (first application process whose frontmost is true)
-	end tell
-	tell application id frontApp
-		activate
-		open location %q
-	end tell
-end try`, url)
-		if execSilent("osascript", "-e", script) == nil {
+		if tryReloadTab(url) {
 			return
 		}
 	}
@@ -174,6 +166,70 @@ end try`, url)
 	} else if hasTool("xdg-open") {
 		execSilent("xdg-open", url)
 	}
+}
+
+func tryReloadTab(url string) bool {
+	chromeScript := fmt.Sprintf(`tell application "Google Chrome"
+	set found to false
+	repeat with w in windows
+		set idx to 0
+		repeat with t in tabs of w
+			set idx to idx + 1
+			if URL of t contains "localhost:%s" then
+				set active tab index of w to idx
+				set index of w to 1
+				set URL of t to %q
+				set found to true
+				exit repeat
+			end if
+		end repeat
+		if found then exit repeat
+	end repeat
+	if not found then open location %q
+end tell`, portOfURL(url), url, url)
+	if execSilent("osascript", "-e", chromeScript) == nil {
+		return true
+	}
+
+	safariScript := fmt.Sprintf(`tell application "Safari"
+	set found to false
+	repeat with w in windows
+		set idx to 0
+		repeat with t in tabs of w
+			set idx to idx + 1
+			if URL of t contains "localhost:%s" then
+				set current tab of w to t
+				set index of w to 1
+				set URL of t to %q
+				set found to true
+				exit repeat
+			end if
+		end repeat
+		if found then exit repeat
+	end repeat
+	if not found then open location %q
+end tell`, portOfURL(url), url, url)
+	if execSilent("osascript", "-e", safariScript) == nil {
+		return true
+	}
+
+	frontAppScript := fmt.Sprintf(`try
+	tell application "System Events"
+		set frontApp to bundle identifier of (first application process whose frontmost is true)
+	end tell
+	tell application id frontApp
+		activate
+		open location %q
+	end tell
+end try`, url)
+	return execSilent("osascript", "-e", frontAppScript) == nil
+}
+
+func portOfURL(raw string) string {
+	if i := strings.LastIndex(raw, ":"); i >= 0 {
+		return raw[i+1:]
+	}
+	return "9393"
 }
 
 func execSilent(name string, args ...string) error {
