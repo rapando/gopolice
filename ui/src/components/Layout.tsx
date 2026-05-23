@@ -7,18 +7,22 @@ interface LayoutProps {
   scanning: boolean
   onScan: () => void
   children: ReactNode
+  historicalLabel?: string | null
+  onClearHistorical?: () => void
+  projectName?: string
 }
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'issues', label: 'Issues' },
   { id: 'tests', label: 'Tests' },
+  { id: 'history', label: 'History' },
   { id: 'security', label: 'Security' },
   { id: 'git', label: 'Git' },
   { id: 'config', label: 'Config' },
 ]
 
-export default function Layout({ page, onNavigate, scanning, onScan, children }: LayoutProps) {
+export default function Layout({ page, onNavigate, scanning, onScan, children, historicalLabel, onClearHistorical, projectName }: LayoutProps) {
   const [version, setVersion] = useState('')
   const [dark, setDark] = useState(false)
 
@@ -46,6 +50,7 @@ export default function Layout({ page, onNavigate, scanning, onScan, children }:
       <header className="bg-white border-b border-gray-200 flex items-center shrink-0 px-5 dark:bg-ctp-mantle dark:border-ctp-surface1">
         <div className="flex items-center gap-6 mr-8">
           <h1 className="font-bold text-base tracking-tight text-gray-800 dark:text-ctp-text">gopolice</h1>
+          {projectName && <span className="text-sm text-gray-500 dark:text-ctp-overlay1 ml-2 border-l border-gray-300 dark:border-ctp-surface1 pl-2">{projectName}</span>}
         </div>
 
         <nav className="flex items-center gap-1 flex-1">
@@ -90,6 +95,20 @@ export default function Layout({ page, onNavigate, scanning, onScan, children }:
           </button>
         </div>
       </header>
+
+      {historicalLabel && (
+        <div className="shrink-0 px-5 py-2 bg-yellow-50 border-b border-yellow-200 flex items-center justify-between text-sm dark:bg-ctp-surface0 dark:border-ctp-surface1">
+          <p className="text-yellow-800 dark:text-ctp-yellow">
+            <span className="font-medium">Historical scan:</span> {historicalLabel}
+          </p>
+          <button
+            onClick={onClearHistorical}
+            className="text-xs font-medium text-yellow-700 hover:text-yellow-900 dark:text-ctp-yellow dark:hover:text-ctp-text underline"
+          >
+            Back to current results
+          </button>
+        </div>
+      )}
 
       <main className="flex-1 overflow-auto bg-gray-50 dark:bg-ctp-base">{children}</main>
 

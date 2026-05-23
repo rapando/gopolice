@@ -8,10 +8,11 @@ import TestDetail from './pages/TestDetail'
 import Security from './pages/Security'
 import GitStats from './pages/GitStats'
 import ConfigPage from './pages/Config'
+import History from './pages/History'
 import Layout from './components/Layout'
 import { getResults, subscribeStatus, ProgressEvent, ScanResult, triggerScan } from './api/client'
 
-type Page = 'dashboard' | 'issues' | 'issue' | 'file' | 'tests' | 'testdetail' | 'security' | 'git' | 'config'
+type Page = 'dashboard' | 'issues' | 'issue' | 'file' | 'tests' | 'testdetail' | 'history' | 'security' | 'git' | 'config'
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
@@ -23,6 +24,7 @@ export default function App() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [selectedPkg, setSelectedPkg] = useState<string>('')
   const [selectedTest, setSelectedTest] = useState<string>('')
+  const [historicalLabel, setHistoricalLabel] = useState<string | null>(null)
 
   useEffect(() => {
     getResults()
@@ -36,6 +38,7 @@ export default function App() {
       if (e.status === 'completed' && e.scanner === 'pipeline') {
         getResults().then(setResult).catch(() => {})
         setScanning(false)
+        setHistoricalLabel(null)
       }
       if (e.status === 'failed') {
         setScanning(false)
@@ -53,6 +56,19 @@ export default function App() {
     triggerScan().catch(() => {})
   }
 
+  const handleLoadResult = (result: ScanResult, label: string) => {
+    setResult(result)
+    setHistoricalLabel(label)
+    setPage('dashboard')
+  }
+
+  const handleClearHistorical = () => {
+    setHistoricalLabel(null)
+    getResults()
+      .then((r) => setResult(r))
+      .catch(() => {})
+  }
+
   const navigate = (p: string, param?: string) => {
     setPage(p as Page)
     if (p === 'issue' && param) setSelectedIssue(param)
@@ -66,7 +82,7 @@ export default function App() {
   }
 
   return (
-    <Layout page={page} onNavigate={navigate} scanning={scanning} onScan={handleScan}>
+    <Layout page={page} onNavigate={navigate} scanning={scanning} onScan={handleScan} historicalLabel={historicalLabel} onClearHistorical={handleClearHistorical} projectName={result?.project_name ?? ''}>
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
@@ -91,6 +107,8 @@ export default function App() {
         <Security issues={result?.issues ?? []} onSelectIssue={(id) => navigate('issue', id)} />
       ) : page === 'git' ? (
         <GitStats gitInfo={result?.git_info ?? null} />
+      ) : page === 'history' ? (
+        <History onLoadResult={handleLoadResult} />
       ) : page === 'config' ? (
         <ConfigPage />
       ) : null}

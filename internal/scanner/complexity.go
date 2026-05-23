@@ -31,7 +31,7 @@ func (s *ComplexityScanner) Name() string {
 
 func (s *ComplexityScanner) Run(ctx context.Context, cfg *config.Config, progress chan<- ProgressEvent) (*Result, error) {
 	start := time.Now()
-	projectDir := cfg.Project.Path
+	projectDir := cfg.TargetDir
 	if projectDir == "" {
 		projectDir = "."
 	}
@@ -39,10 +39,6 @@ func (s *ComplexityScanner) Run(ctx context.Context, cfg *config.Config, progres
 	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Analyzing code complexity"}
 
 	threshold := s.Threshold
-	excludeDirs := make(map[string]bool)
-	for _, d := range cfg.Project.ExcludeDirs {
-		excludeDirs[d] = true
-	}
 
 	var allIssues []model.Issue
 
@@ -51,9 +47,6 @@ func (s *ComplexityScanner) Run(ctx context.Context, cfg *config.Config, progres
 			return nil
 		}
 		if info.IsDir() {
-			if excludeDirs[info.Name()] {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 		if !strings.HasSuffix(info.Name(), ".go") || strings.HasSuffix(info.Name(), "_test.go") {

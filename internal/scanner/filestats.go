@@ -25,17 +25,12 @@ func (s *FileStatsScanner) Name() string {
 
 func (s *FileStatsScanner) Run(ctx context.Context, cfg *config.Config, progress chan<- ProgressEvent) (*Result, error) {
 	start := time.Now()
-	projectDir := cfg.Project.Path
+	projectDir := cfg.TargetDir
 	if projectDir == "" {
 		projectDir = "."
 	}
 
 	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Gathering file statistics"}
-
-	excludeDirs := make(map[string]bool)
-	for _, d := range cfg.Project.ExcludeDirs {
-		excludeDirs[d] = true
-	}
 
 	var fileStats []model.FileStat
 	totalFiles := 0
@@ -47,9 +42,6 @@ func (s *FileStatsScanner) Run(ctx context.Context, cfg *config.Config, progress
 			return nil
 		}
 		if info.IsDir() {
-			if excludeDirs[info.Name()] {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 

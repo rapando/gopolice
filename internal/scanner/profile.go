@@ -19,10 +19,6 @@ func (s *ProfileScanner) Name() string {
 
 func (s *ProfileScanner) Run(ctx context.Context, cfg *config.Config, progress chan<- ProgressEvent) (*Result, error) {
 	start := time.Now()
-	projectDir := cfg.Project.Path
-	if projectDir == "" {
-		projectDir = "."
-	}
 
 	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Profiling (not yet implemented — stub)"}
 

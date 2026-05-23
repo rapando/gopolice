@@ -23,12 +23,9 @@ func NewServeCommand() *cobra.Command {
 				return fmt.Errorf("load config: %w", err)
 			}
 
-			projectDir := cfg.Project.Path
-			if projectDir == "" {
-				projectDir = "."
-			}
+			cfg.TargetDir = "."
 
-			cachePath := cache.ResultPath(projectDir)
+			cachePath := cache.ResultPath(cfg.TargetDir)
 			if _, err := os.Stat(cachePath); os.IsNotExist(err) {
 				return fmt.Errorf("no cached result found at %s (run 'gopolice scan' first)", cachePath)
 			}
@@ -40,9 +37,9 @@ func NewServeCommand() *cobra.Command {
 
 			server := api.NewServerWithResult(cfg, uiFS, cachedResult, GetVersion())
 			if port > 0 {
-				cfg.UI.Port = port
+				cfg.Port = port
 			}
-			uiPort := cfg.UI.Port
+			uiPort := cfg.Port
 			if uiPort == 0 {
 				uiPort = 9393
 			}

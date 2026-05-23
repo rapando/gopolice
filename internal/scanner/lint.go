@@ -42,7 +42,7 @@ var vetLineRe = regexp.MustCompile(`^(?:#\s+\S+\s+)?(.+?):(\d+):(\d+):\s*(.+)$`)
 
 func (s *LintScanner) Run(ctx context.Context, cfg *config.Config, progress chan<- ProgressEvent) (*Result, error) {
 	start := time.Now()
-	projectDir := cfg.Project.Path
+	projectDir := cfg.TargetDir
 	if projectDir == "" {
 		projectDir = "."
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/rapando/gopolice/internal/cache"
 	"github.com/rapando/gopolice/internal/config"
 	"github.com/rapando/gopolice/internal/fixer"
+	"github.com/rapando/gopolice/internal/history"
 	"github.com/rapando/gopolice/internal/model"
 	"github.com/rapando/gopolice/internal/scanner"
 )
@@ -40,7 +41,7 @@ func NewServerWithResult(cfg *config.Config, uiFS fs.FS, result *model.ScanResul
 }
 
 func newServer(cfg *config.Config, uiFS fs.FS, result *model.ScanResult, version string) *Server {
-	projectDir := cfg.Project.Path
+	projectDir := cfg.TargetDir
 	if projectDir == "" {
 		projectDir = "."
 	}
@@ -78,11 +79,13 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/config", s.handleGetMergedConfig)
 	s.mux.HandleFunc("GET /api/config/global", s.handleGetGlobalConfig)
 	s.mux.HandleFunc("PUT /api/config/global", s.handleUpdateGlobalConfig)
-	s.mux.HandleFunc("GET /api/config/project", s.handleGetProjectConfig)
-	s.mux.HandleFunc("PUT /api/config/project", s.handleUpdateProjectConfig)
 	s.mux.HandleFunc("POST /api/fix/{id}", s.handleApplyFix)
 	s.mux.HandleFunc("POST /api/fix/{id}/undo", s.handleUndoFix)
 	s.mux.HandleFunc("GET /api/snippet", s.handleSnippet)
+	s.mux.HandleFunc("GET /api/history", s.handleHistoryList)
+	s.mux.HandleFunc("GET /api/history/entry/{id}", s.handleHistoryGet)
+	s.mux.HandleFunc("GET /api/history/diff", s.handleHistoryDiff)
+	s.mux.HandleFunc("DELETE /api/history/entry/{id}", s.handleHistoryDelete)
 	s.mux.HandleFunc("GET /", s.handleStatic)
 }
 
@@ -169,6 +172,9 @@ func (s *Server) runScan(ctx context.Context) {
 			cachePath := cache.ResultPath(s.projectDir)
 			if err := cache.Save(result, cachePath); err != nil {
 				log.Printf("cache save: %v", err)
+			}
+			if err := history.Save(s.projectDir, result); err != nil {
+				log.Printf("history save: %v", err)
 			}
 
 			s.broadcaster.Broadcast(scanner.ProgressEvent{
@@ -348,30 +354,6 @@ func (s *Server) handleUpdateGlobalConfig(w http.ResponseWriter, r *http.Request
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
-func (s *Server) handleGetProjectConfig(w http.ResponseWriter, r *http.Request) {
-	path := filepath.Join(s.projectDir, ".gopolice", "config.yaml")
-	cfg, err := config.LoadConfigFile(path)
-	if err != nil {
-		jsonResponse(w, http.StatusOK, config.DefaultConfig())
-		return
-	}
-	jsonResponse(w, http.StatusOK, cfg)
-}
-
-func (s *Server) handleUpdateProjectConfig(w http.ResponseWriter, r *http.Request) {
-	var cfg config.Config
-	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		jsonError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON: %v", err))
-		return
-	}
-	projectPath := filepath.Join(s.projectDir, ".gopolice", "config.yaml")
-	if err := config.SaveConfigFile(&cfg, projectPath); err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("save failed: %v", err))
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]string{"status": "saved"})
-}
-
 func (s *Server) handleApplyFix(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	result := s.store.Get()
@@ -443,7 +425,26 @@ func (s *Server) handleSnippet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Guard against path traversal (SAST: taint analysis flags user input reaching os.ReadFile).
+	// The `file` param comes from client query string. Two checks ensure it cannot escape projectDir:
+	//
+	// 1. Normalisation check: filepath.Clean resolves "foo/../bar" → "bar" and strips ".//" etc.
+	//    If cleaned != original, the path contained traversal segments. We also reject if ".."
+	//    appears anywhere, catching patterns like ".." or "...." that survive or bypass Clean.
+	//
+	// 2. Prefix check: after joining with projectDir, the resolved path must still be within
+	//    projectDir. This catches symlink-resolved escapes and edge cases Clean doesn't handle.
+	cleaned := filepath.Clean(file)
+	if cleaned != file || strings.Contains(file, "..") {
+		jsonError(w, http.StatusBadRequest, "invalid file path")
+		return
+	}
 	fullPath := filepath.Join(s.projectDir, file)
+	projectRoot := filepath.Clean(s.projectDir) + string(filepath.Separator)
+	if !strings.HasPrefix(fullPath, projectRoot) && fullPath != filepath.Clean(s.projectDir) {
+		jsonError(w, http.StatusBadRequest, "invalid file path")
+		return
+	}
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, fmt.Sprintf("file not found: %s", file))
@@ -483,6 +484,60 @@ func (s *Server) handleSnippet(w http.ResponseWriter, r *http.Request) {
 		"total_lines": totalLines,
 		"lines":       snippet,
 	})
+}
+
+func (s *Server) handleHistoryList(w http.ResponseWriter, r *http.Request) {
+	entries, err := history.List(s.projectDir)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if entries == nil {
+		entries = []history.Entry{}
+	}
+	jsonResponse(w, http.StatusOK, entries)
+}
+
+func (s *Server) handleHistoryGet(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	result, err := history.Load(s.projectDir, id)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "history entry not found")
+		return
+	}
+	jsonResponse(w, http.StatusOK, result)
+}
+
+func (s *Server) handleHistoryDiff(w http.ResponseWriter, r *http.Request) {
+	fromID := r.URL.Query().Get("from")
+	toID := r.URL.Query().Get("to")
+	if fromID == "" || toID == "" {
+		jsonError(w, http.StatusBadRequest, "from and to query params required")
+		return
+	}
+	from, err := history.Load(s.projectDir, fromID)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "from entry not found")
+		return
+	}
+	to, err := history.Load(s.projectDir, toID)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "to entry not found")
+		return
+	}
+	diff := history.Diff(from, to)
+	diff.From = fromID
+	diff.To = toID
+	jsonResponse(w, http.StatusOK, diff)
+}
+
+func (s *Server) handleHistoryDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := history.Delete(s.projectDir, id); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
