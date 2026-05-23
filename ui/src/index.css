@@ -15,7 +15,7 @@
   }
 
   body {
-    @apply bg-gray-50 text-gray-900;
+    @apply bg-gray-50 text-gray-900 dark:bg-ctp-base dark:text-ctp-text;
   }
 
   ::selection {
@@ -25,15 +25,28 @@
 
 @layer components {
   .card {
-    @apply bg-white border border-gray-200 rounded;
+    @apply bg-white border border-gray-200 rounded dark:bg-ctp-surface0 dark:border-ctp-surface1;
   }
 
   .input {
     @apply px-3 py-1.5 text-sm border border-gray-300 rounded bg-white text-gray-900
-           placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500;
+           placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500
+           dark:bg-ctp-surface0 dark:border-ctp-surface1 dark:text-ctp-text dark:placeholder:text-ctp-overlay0;
   }
 
   .sq-metric {
     @apply px-5 py-4 border-l-4;
+  }
+
+  .btn {
+    @apply px-4 py-2 text-sm font-medium rounded transition-colors;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 text-sm font-medium bg-green-600 text-white rounded hover:bg-green-700 transition-colors dark:bg-ctp-green dark:text-ctp-base dark:hover:bg-ctp-teal;
+  }
+
+  .btn-disabled {
+    @apply bg-gray-100 text-gray-400 dark:bg-ctp-surface1 dark:text-ctp-overlay0;
   }
 }
