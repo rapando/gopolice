@@ -150,6 +150,10 @@ export function getDeps(): Promise<Dependency[]> {
   return request<Dependency[]>('/api/results/deps')
 }
 
+export function getVersion(): Promise<{ version: string }> {
+  return request('/api/version')
+}
+
 export function healthCheck(): Promise<{ status: string }> {
   return request('/api/health')
 }

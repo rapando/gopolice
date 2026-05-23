@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useState } from 'react'
+import { getVersion } from '../api/client'
 
 interface LayoutProps {
   page: string
@@ -18,6 +19,7 @@ const navItems = [
 ]
 
 export default function Layout({ page, onNavigate, scanning, onScan, children }: LayoutProps) {
+  const [version, setVersion] = useState('')
   const [dark, setDark] = useState(false)
 
   useEffect(() => {
@@ -26,6 +28,10 @@ export default function Layout({ page, onNavigate, scanning, onScan, children }:
     const isDark = stored === 'dark' || (!stored && prefersDark)
     setDark(isDark)
     document.documentElement.classList.toggle('dark', isDark)
+  }, [])
+
+  useEffect(() => {
+    getVersion().then((r) => setVersion(r.version)).catch(() => {})
   }, [])
 
   const toggleDark = () => {
@@ -86,6 +92,11 @@ export default function Layout({ page, onNavigate, scanning, onScan, children }:
       </header>
 
       <main className="flex-1 overflow-auto bg-gray-50 dark:bg-ctp-base">{children}</main>
+
+      <footer className="shrink-0 px-5 py-1 text-xs text-gray-400 bg-white border-t border-gray-100 flex justify-end items-center gap-1 dark:bg-ctp-mantle dark:border-ctp-surface1 dark:text-ctp-overlay0">
+        {version && <span>v{version}</span>}
+        <span>&copy; Rapando</span>
+      </footer>
     </div>
   )
 }

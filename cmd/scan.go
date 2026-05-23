@@ -99,7 +99,7 @@ func runScanAndServe(c *cobra.Command, cfg *config.Config, projectDir string, no
 		}
 		c.PrintErr(fmt.Sprintf("Scan complete: %d issues found in %v\n", len(result.Issues), result.Duration))
 
-		server := api.NewServer(cfg, uiFS)
+		server := api.NewServer(cfg, uiFS, GetVersion())
 		uiPort := cfg.UI.Port
 		if uiPort == 0 {
 			uiPort = 9393

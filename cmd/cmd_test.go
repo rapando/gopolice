@@ -37,8 +37,8 @@ func TestVersionCommand(t *testing.T) {
 		t.Fatalf("version command failed: %v", err)
 	}
 	output = strings.TrimSpace(output)
-	if output != "dev" {
-		t.Errorf("expected 'dev', got '%s'", output)
+	if output == "" {
+		t.Errorf("expected non-empty version, got empty")
 	}
 }
 

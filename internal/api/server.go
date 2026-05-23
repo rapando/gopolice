@@ -21,24 +21,25 @@ import (
 )
 
 type Server struct {
-	store      *Store
-	broadcaster *SSEBroadcaster
-	config     *config.Config
-	projectDir string
-	mux        *http.ServeMux
-	server     *http.Server
-	uiFS       fs.FS
+	store       *Store
+	broadcaster  *SSEBroadcaster
+	config      *config.Config
+	projectDir  string
+	mux         *http.ServeMux
+	server      *http.Server
+	uiFS        fs.FS
+	version     string
 }
 
-func NewServer(cfg *config.Config, uiFS fs.FS) *Server {
-	return newServer(cfg, uiFS, nil)
+func NewServer(cfg *config.Config, uiFS fs.FS, version string) *Server {
+	return newServer(cfg, uiFS, nil, version)
 }
 
-func NewServerWithResult(cfg *config.Config, uiFS fs.FS, result *model.ScanResult) *Server {
-	return newServer(cfg, uiFS, result)
+func NewServerWithResult(cfg *config.Config, uiFS fs.FS, result *model.ScanResult, version string) *Server {
+	return newServer(cfg, uiFS, result, version)
 }
 
-func newServer(cfg *config.Config, uiFS fs.FS, result *model.ScanResult) *Server {
+func newServer(cfg *config.Config, uiFS fs.FS, result *model.ScanResult, version string) *Server {
 	projectDir := cfg.Project.Path
 	if projectDir == "" {
 		projectDir = "."
@@ -57,12 +58,14 @@ func newServer(cfg *config.Config, uiFS fs.FS, result *model.ScanResult) *Server
 		projectDir:  absDir,
 		mux:         http.NewServeMux(),
 		uiFS:        uiFS,
+		version:     version,
 	}
 	s.registerRoutes()
 	return s
 }
 
 func (s *Server) registerRoutes() {
+	s.mux.HandleFunc("GET /api/version", s.handleVersion)
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.HandleFunc("POST /api/scan", s.handleScan)
 	s.mux.HandleFunc("GET /api/scan/status", s.handleScanStatus)
@@ -122,6 +125,10 @@ func jsonResponse(w http.ResponseWriter, status int, data interface{}) {
 
 func jsonError(w http.ResponseWriter, status int, msg string) {
 	jsonResponse(w, status, map[string]string{"error": msg})
+}
+
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, map[string]string{"version": s.version})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

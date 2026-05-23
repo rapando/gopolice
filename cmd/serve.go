@@ -38,7 +38,7 @@ func NewServeCommand() *cobra.Command {
 				return fmt.Errorf("load cache: %w", err)
 			}
 
-			server := api.NewServerWithResult(cfg, uiFS, cachedResult)
+			server := api.NewServerWithResult(cfg, uiFS, cachedResult, GetVersion())
 			if port > 0 {
 				cfg.UI.Port = port
 			}
