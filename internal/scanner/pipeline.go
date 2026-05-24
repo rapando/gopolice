@@ -27,6 +27,9 @@ func NewDefaultPipeline() *Pipeline {
 		NewSecurityScanner(),
 		NewTestScanner(),
 		NewBenchmarkScanner(),
+		NewProfileScanner(),
+		NewDeadCodeScanner(),
+		NewDepGraphScanner(),
 		NewComplexityScanner(),
 		NewFileStatsScanner(),
 		NewGitScanner(),
@@ -78,6 +81,10 @@ func (p *Pipeline) Run(ctx context.Context, cfg *config.Config, progress chan<- 
 			result.TestResults = data
 		case []model.BenchmarkResult:
 			result.Benchmarks = data
+		case *model.ProfileData:
+			result.Profile = data
+		case *model.DepGraph:
+			result.DepGraph = data
 		case *model.GitInfo:
 			result.GitInfo = data
 		case *model.ScanResult:

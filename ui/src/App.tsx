@@ -6,6 +6,9 @@ import FileView from './pages/FileView'
 import Tests from './pages/Tests'
 import TestDetail from './pages/TestDetail'
 import Benchmarks from './pages/Benchmarks'
+import Profile from './pages/Profile'
+import DeadCode from './pages/DeadCode'
+import DepGraph from './pages/DepGraph'
 import Security from './pages/Security'
 import GitStats from './pages/GitStats'
 import ConfigPage from './pages/Config'
@@ -13,7 +16,7 @@ import History from './pages/History'
 import Layout from './components/Layout'
 import { getResults, subscribeStatus, ProgressEvent, ScanResult, triggerScan } from './api/client'
 
-type Page = 'dashboard' | 'issues' | 'issue' | 'file' | 'tests' | 'testdetail' | 'benchmarks' | 'history' | 'security' | 'git' | 'config'
+type Page = 'dashboard' | 'issues' | 'issue' | 'file' | 'tests' | 'testdetail' | 'benchmarks' | 'profile' | 'deadcode' | 'depgraph' | 'history' | 'security' | 'git' | 'config'
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
@@ -106,6 +109,12 @@ export default function App() {
         <TestDetail testResult={result?.test_results ?? null} issues={result?.issues ?? []} pkgName={selectedPkg} testName={selectedTest} onBack={() => navigate('tests')} />
       ) : page === 'benchmarks' ? (
         <Benchmarks benchmarks={result?.benchmarks ?? null} onScan={handleScan} scanning={scanning} />
+      ) : page === 'profile' ? (
+        <Profile profile={result?.profile ?? null} onScan={handleScan} scanning={scanning} />
+      ) : page === 'deadcode' ? (
+        <DeadCode issues={result?.issues ?? []} onSelectIssue={(id) => navigate('issue', id)} onSelectFile={(f) => navigate('file', f)} />
+      ) : page === 'depgraph' ? (
+        <DepGraph depGraph={result?.dep_graph ?? null} onScan={handleScan} scanning={scanning} />
       ) : page === 'security' ? (
         <Security issues={result?.issues ?? []} onSelectIssue={(id) => navigate('issue', id)} />
       ) : page === 'git' ? (

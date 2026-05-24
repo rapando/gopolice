@@ -29,6 +29,8 @@ export interface ScanResult {
   issues: Issue[]
   test_results: TestResult | null
   benchmarks: BenchmarkResult[] | null
+  profile: ProfileData | null
+  dep_graph: DepGraph | null
   deps: Dependency[] | null
   git_info: GitInfo | null
   file_stats: FileStat[] | null
@@ -43,6 +45,19 @@ export interface BenchmarkResult {
   time_per_op: number
   bytes_per_op: number
   allocs_per_op: number
+}
+
+export interface ProfileData {
+  cpu: ProfileEntry[] | null
+  mem: ProfileEntry[] | null
+}
+
+export interface ProfileEntry {
+  function: string
+  flat: number
+  flat_pct: number
+  cum: number
+  cum_pct: number
 }
 
 export interface TestResult {
@@ -78,6 +93,15 @@ export interface Dependency {
   path: string
   version: string
   indirect: boolean
+}
+
+export interface DepEdge {
+  from: string
+  to: string
+}
+
+export interface DepGraph {
+  edges: DepEdge[]
 }
 
 export interface AuthorInfo {
@@ -172,12 +196,20 @@ export function getBenchmarks(): Promise<BenchmarkResult[]> {
   return request('/api/results/benchmarks')
 }
 
+export function getProfile(): Promise<ProfileData> {
+  return request('/api/results/profile')
+}
+
 export function getGitInfo(): Promise<GitInfo> {
   return request<GitInfo>('/api/results/git')
 }
 
 export function getDeps(): Promise<Dependency[]> {
   return request<Dependency[]>('/api/results/deps')
+}
+
+export function getDepGraph(): Promise<DepGraph> {
+  return request<DepGraph>('/api/results/deps/graph')
 }
 
 export interface HistoryEntry {
@@ -305,6 +337,7 @@ export function categoryColor(c: string): string {
     case 'style': return 'text-gray-600'
     case 'complexity': return 'text-purple-700'
     case 'test': return 'text-green-700'
+    case 'deadcode': return 'text-rose-700'
     default: return 'text-gray-600'
   }
 }

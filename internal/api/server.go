@@ -75,8 +75,10 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/results/issues/{id}", s.handleGetIssue)
 	s.mux.HandleFunc("GET /api/results/tests", s.handleGetTests)
 	s.mux.HandleFunc("GET /api/results/benchmarks", s.handleGetBenchmarks)
+	s.mux.HandleFunc("GET /api/results/profile", s.handleGetProfile)
 	s.mux.HandleFunc("GET /api/results/git", s.handleGetGit)
 	s.mux.HandleFunc("GET /api/results/deps", s.handleGetDeps)
+	s.mux.HandleFunc("GET /api/results/deps/graph", s.handleGetDepGraph)
 	s.mux.HandleFunc("GET /api/config", s.handleGetMergedConfig)
 	s.mux.HandleFunc("GET /api/config/global", s.handleGetGlobalConfig)
 	s.mux.HandleFunc("PUT /api/config/global", s.handleUpdateGlobalConfig)
@@ -319,6 +321,15 @@ func (s *Server) handleGetBenchmarks(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, result.Benchmarks)
 }
 
+func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
+	result := s.store.Get()
+	if result == nil || result.Profile == nil {
+		jsonError(w, http.StatusNotFound, "no profile data available")
+		return
+	}
+	jsonResponse(w, http.StatusOK, result.Profile)
+}
+
 func (s *Server) handleGetGit(w http.ResponseWriter, r *http.Request) {
 	result := s.store.Get()
 	if result == nil || result.GitInfo == nil {
@@ -335,6 +346,15 @@ func (s *Server) handleGetDeps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, result.Deps)
+}
+
+func (s *Server) handleGetDepGraph(w http.ResponseWriter, r *http.Request) {
+	result := s.store.Get()
+	if result == nil || result.DepGraph == nil {
+		jsonError(w, http.StatusNotFound, "no dependency graph available")
+		return
+	}
+	jsonResponse(w, http.StatusOK, result.DepGraph)
 }
 
 func (s *Server) handleGetMergedConfig(w http.ResponseWriter, r *http.Request) {

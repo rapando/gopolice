@@ -41,27 +41,28 @@
   - API: `GET /api/results/benchmarks` endpoint
   - UI: separate "Benchmarks" page with sortable table, nav tab
 
-- [ ] **Profiling scanner** — CPU/mem `pprof` data
+- [x] **Profiling scanner** — CPU/mem `pprof` data
 
-  - `internal/scanner/profile.go` — currently a stub; make it run:
-    - `go test -cpuprofile=<tmpfile> -memprofile=<tmpfile> ./...`
-    - Parse `go tool pprof -top` text output for top-N functions
-  - Store profile data in `ScanResult.Profile`, served via API
-  - UI: flamegraph visualization (d3-flame-graph or custom SVG), top-N table
-  - Profile data model: `[]ProfileEntry{Function, Flat, Cum, Hot}`
+  - `internal/scanner/profile.go` — runs `go test -cpuprofile=<tmpfile> -memprofile=<tmpfile> ./...`
+  - Parses `go tool pprof -top` text output for top-N functions
+  - Profile data model: `model.ProfileData{CPU, Mem []ProfileEntry{Function, Flat, FlatPct, Cum, CumPct}}`
+  - Store profile data in `ScanResult.Profile`, served via `GET /api/results/profile`
+  - UI: separate "Profile" page with top-N tables for CPU and memory, bar sparklines
 
-- [ ] **Dead code scanner** — `staticcheck` unused code detection
+- [x] **Dead code scanner** — `staticcheck` unused code detection
 
-  - Shell out to `staticcheck -checks "U1000" ./...`
+  - Shell out to `staticcheck -checks "U1000" -f json ./...`
   - Parse JSON output, map to `model.Issue{Category: "deadcode"}`
-  - Optional: also run `unused` binary if available
+  - Fallback: `unused` binary if staticcheck not available
+  - UI: "Dead Code" nav tab with filtered issues table
 
-- [ ] **Dependency graph** — parse `go mod graph`
+- [x] **Dependency graph** — parse `go mod graph`
 
-  - Run `go mod graph` in project dir
-  - Parse into `model.DepGraph{Edges: []DepEdge{From, To}}`
-  - API: `GET /api/results/deps/graph`
-  - UI: D3 force-directed graph or cytoscape.js interactive tree
+  - `internal/scanner/depgraph.go` — runs `go mod graph`, parses output into `model.DepGraph{Edges: []DepEdge{From, To}}`
+  - Pipeline: `NewDepGraphScanner()` in default pipeline; type switch for `*model.DepGraph`
+  - API: `GET /api/results/deps/graph` endpoint
+  - UI: force-directed SVG graph with D3, zoom/pan, tooltips, amber/indigo node colors
+  - Nav tab: "Deps Graph"
 
 ---
 
@@ -121,11 +122,11 @@
   - Highlight fast/slow with color coding
   - Compare mode: select two history entries, diff benchmarks (future)
 
-- [ ] **Profile page** — flamegraph and top-N hot functions
+- [x] **Profile page** — top-N hot functions tables
 
   - New top-nav item "Profile"
-  - Flamegraph: d3-flame-graph or custom SVG render
-  - Top-N table: function, flat %, cum %
+  - Top-N tables for CPU and memory: function, flat, flat%, cum, cum%
+  - Bar sparklines next to flat values for visual comparison
   - Toggle between CPU and memory profile views
 
 - [ ] **Trend charts** — plot metrics over time from scan history
