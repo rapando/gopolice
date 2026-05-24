@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rapando/gopolice/internal/cache"
@@ -19,6 +20,7 @@ import (
 	"github.com/rapando/gopolice/internal/history"
 	"github.com/rapando/gopolice/internal/model"
 	"github.com/rapando/gopolice/internal/scanner"
+	"github.com/rapando/gopolice/internal/watcher"
 )
 
 type Server struct {
@@ -30,6 +32,8 @@ type Server struct {
 	server      *http.Server
 	uiFS        fs.FS
 	version     string
+	scanMu      sync.Mutex
+	scanRunning bool
 }
 
 func NewServer(cfg *config.Config, uiFS fs.FS, version string) *Server {
@@ -82,10 +86,12 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/config", s.handleGetMergedConfig)
 	s.mux.HandleFunc("GET /api/config/global", s.handleGetGlobalConfig)
 	s.mux.HandleFunc("PUT /api/config/global", s.handleUpdateGlobalConfig)
+	s.mux.HandleFunc("POST /api/fix/batch", s.handleBatchFix)
 	s.mux.HandleFunc("POST /api/fix/{id}", s.handleApplyFix)
 	s.mux.HandleFunc("POST /api/fix/{id}/undo", s.handleUndoFix)
 	s.mux.HandleFunc("GET /api/snippet", s.handleSnippet)
 	s.mux.HandleFunc("GET /api/history", s.handleHistoryList)
+	s.mux.HandleFunc("GET /api/history/trends", s.handleHistoryTrends)
 	s.mux.HandleFunc("GET /api/history/entry/{id}", s.handleHistoryGet)
 	s.mux.HandleFunc("GET /api/history/diff", s.handleHistoryDiff)
 	s.mux.HandleFunc("DELETE /api/history/entry/{id}", s.handleHistoryDelete)
@@ -99,6 +105,18 @@ func (s *Server) Start(port int) error {
 	}
 	log.Printf("gopolice UI available at http://localhost:%d", port)
 	return s.server.ListenAndServe()
+}
+
+func (s *Server) Watch(debounce time.Duration) (*watcher.Watcher, error) {
+	w, err := watcher.New(s.projectDir, debounce, func() {
+		s.TriggerScan(context.Background())
+	})
+	if err != nil {
+		return nil, err
+	}
+	w.Start()
+	log.Printf("watching .go files in %s (debounce %v)", s.projectDir, debounce)
+	return w, nil
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
@@ -146,19 +164,45 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusAccepted, map[string]string{"status": "scan_started"})
 }
 
+func (s *Server) TriggerScan(ctx context.Context) {
+	s.runScan(ctx)
+}
+
 func (s *Server) runScan(ctx context.Context) {
+	s.scanMu.Lock()
+	if s.scanRunning {
+		s.scanMu.Unlock()
+		log.Println("scan already in progress, skipping")
+		return
+	}
+	s.scanRunning = true
+	s.scanMu.Unlock()
+
+	defer func() {
+		s.scanMu.Lock()
+		s.scanRunning = false
+		s.scanMu.Unlock()
+	}()
+
 	start := time.Now()
 	s.broadcaster.Broadcast(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusStarted, Message: "Starting scan"})
 
-	p := scanner.NewDefaultPipeline()
 	progress := make(chan scanner.ProgressEvent, 100)
 	done := make(chan *model.ScanResult, 1)
 
 	go func() {
-		result, err := p.Run(ctx, s.config, progress)
+		result, err := scanner.RunWorkspaceScan(ctx, s.config, progress)
 		if err != nil {
 			s.broadcaster.Broadcast(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusFailed, Message: err.Error()})
 			return
+		}
+		if result == nil {
+			p := scanner.NewDefaultPipeline()
+			result, err = p.Run(ctx, s.config, progress)
+			if err != nil {
+				s.broadcaster.Broadcast(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusFailed, Message: err.Error()})
+				return
+			}
 		}
 		done <- result
 	}()
@@ -439,6 +483,52 @@ func (s *Server) handleUndoFix(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "undone"})
 }
 
+type batchFixRequest struct {
+	IssueIDs []string `json:"issue_ids"`
+}
+
+type batchFixResult struct {
+	ID      string `json:"id"`
+	Applied bool   `json:"applied"`
+	Message string `json:"message"`
+}
+
+func (s *Server) handleBatchFix(w http.ResponseWriter, r *http.Request) {
+	var req batchFixRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	result := s.store.Get()
+	if result == nil {
+		jsonError(w, http.StatusNotFound, "no scan results")
+		return
+	}
+
+	issueMap := make(map[string]*model.Issue, len(result.Issues))
+	for i := range result.Issues {
+		issueMap[result.Issues[i].ID] = &result.Issues[i]
+	}
+
+	results := make([]batchFixResult, 0, len(req.IssueIDs))
+	for _, id := range req.IssueIDs {
+		issue, ok := issueMap[id]
+		if !ok {
+			results = append(results, batchFixResult{ID: id, Applied: false, Message: "issue not found"})
+			continue
+		}
+		fixResult, err := fixer.ApplyFix(issue, s.projectDir)
+		if err != nil {
+			results = append(results, batchFixResult{ID: id, Applied: false, Message: err.Error()})
+			continue
+		}
+		results = append(results, batchFixResult{ID: id, Applied: fixResult.Applied, Message: fixResult.Message})
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]interface{}{"results": results})
+}
+
 func (s *Server) handleSnippet(w http.ResponseWriter, r *http.Request) {
 	file := r.URL.Query().Get("file")
 	lineStr := r.URL.Query().Get("line")
@@ -526,6 +616,18 @@ func (s *Server) handleHistoryList(w http.ResponseWriter, r *http.Request) {
 		entries = []history.Entry{}
 	}
 	jsonResponse(w, http.StatusOK, entries)
+}
+
+func (s *Server) handleHistoryTrends(w http.ResponseWriter, r *http.Request) {
+	trends, err := history.GetTrends(s.projectDir)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if trends == nil {
+		trends = &model.TrendsData{Points: []model.TrendPoint{}}
+	}
+	jsonResponse(w, http.StatusOK, trends)
 }
 
 func (s *Server) handleHistoryGet(w http.ResponseWriter, r *http.Request) {

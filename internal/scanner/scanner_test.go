@@ -555,7 +555,7 @@ func TestFileStatsScanner_NoExcludeDirs(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 	data := result.Data.(*model.ScanResult)
-	if data.GoFiles != 2 {
-		t.Errorf("expected 2 go files (vendor included since no excludes), got %d", data.GoFiles)
+	if data.GoFiles != 1 {
+		t.Errorf("expected 1 go file (vendor skipped by default filter), got %d", data.GoFiles)
 	}
 }

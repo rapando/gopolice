@@ -33,6 +33,7 @@ type Issue struct {
 	Message  string   `json:"message"`
 	Category Category `json:"category"`
 	Solution string   `json:"solution,omitempty"`
+	Module   string   `json:"module,omitempty"`
 	GitBlame *BlameInfo `json:"git_blame,omitempty"`
 }
 
@@ -89,6 +90,20 @@ type DepGraph struct {
 	Edges []DepEdge `json:"edges"`
 }
 
+type TrendPoint struct {
+	Timestamp   time.Time `json:"timestamp"`
+	Errors      int       `json:"errors"`
+	Warnings    int       `json:"warnings"`
+	Infos       int       `json:"infos"`
+	Grade       string    `json:"grade"`
+	Coverage    float64   `json:"coverage"`
+	BenchNSOp   float64   `json:"bench_ns_op"`
+}
+
+type TrendsData struct {
+	Points []TrendPoint `json:"points"`
+}
+
 type AuthorInfo struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
@@ -136,6 +151,7 @@ type ScanResult struct {
 	TotalFiles  int           `json:"total_files"`
 	GoFiles     int           `json:"go_files"`
 	TotalLines  int           `json:"total_lines"`
+	Modules     []string      `json:"modules,omitempty"`
 }
 
 type BenchmarkResult struct {
