@@ -135,9 +135,9 @@ Please fix all issues listed above. For each issue:
 `,u}function M7(e){let t="";const r=e.split(`
 `);let n=!1,a=!1;for(let l=0;l<r.length;l++){let s=r[l];if(s.startsWith("```")){n=!n,t+=n?"<pre><code>":`</code></pre>
 `;continue}if(n){t+=cl(s)+`
-`;continue}if(s.startsWith("| ")){a||(t+=`<table>
-`,a=!0);const f=l+1<r.length&&r[l+1].startsWith("|---"),d=s.split("|").filter(h=>h.trim()!=="").map(h=>{const p=cl(h.trim()),m=p.startsWith("<b>")&&p.endsWith("</b>");return p});f?(t+="  <tr>"+d.map(h=>`<th>${h}</th>`).join("")+`</tr>
-`,l++):t+="  <tr>"+d.map(h=>`<td>${h}</td>`).join("")+`</tr>
+`;continue}if(s.startsWith("| ")){a||(t+=`<table class="w-full text-sm border-collapse mb-4">
+`,a=!0);const f=l+1<r.length&&r[l+1].startsWith("|---"),d=s.split("|").filter(h=>h.trim()!=="").map(h=>{const p=h.trim();let m=cl(p);return m=m.replace(/\*\*(.+?)\*\*/g,"<b>$1</b>"),m=m.replace(/`([^`]+)`/g,"<code>$1</code>"),m});f?(t+='  <tr class="border-b border-gray-300 dark:border-ctp-surface1 bg-gray-100 dark:bg-ctp-mantle">'+d.map(h=>`<th class="text-left px-3 py-2 text-xs font-semibold text-gray-600 dark:text-ctp-subtext1">${h}</th>`).join("")+`</tr>
+`,l++):t+='  <tr class="border-b border-gray-200 dark:border-ctp-surface1">'+d.map(h=>`<td class="px-3 py-2 text-sm text-gray-700 dark:text-ctp-subtext0">${h}</td>`).join("")+`</tr>
 `;continue}if(a&&s.trim()===""){t+=`</table>
 `,a=!1;continue}if(s.startsWith("---")){t+=`<hr>
 `;continue}if(s.startsWith("## ")){t+=`<h2>${cl(s.slice(3))}</h2>

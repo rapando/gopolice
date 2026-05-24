@@ -82,7 +82,7 @@ function renderMarkdown(md: string): string {
 
     if (line.startsWith('| ')) {
       if (!inTable) {
-        html += '<table>\n'
+        html += '<table class="w-full text-sm border-collapse mb-4">\n'
         inTable = true
       }
       const isHeader = i + 1 < lines.length && lines[i + 1].startsWith('|---')
@@ -90,15 +90,19 @@ function renderMarkdown(md: string): string {
         .split('|')
         .filter((c) => c.trim() !== '')
         .map((c) => {
-          const content = escapeHtml(c.trim())
-          const bold = content.startsWith('<b>') && content.endsWith('</b>')
-          return bold ? content : content
+          const trimmed = c.trim()
+          let content = escapeHtml(trimmed)
+          // bold
+          content = content.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+          // inline code
+          content = content.replace(/`([^`]+)`/g, '<code>$1</code>')
+          return content
         })
       if (isHeader) {
-        html += '  <tr>' + cells.map((c) => `<th>${c}</th>`).join('') + '</tr>\n'
+        html += '  <tr class="border-b border-gray-300 dark:border-ctp-surface1 bg-gray-100 dark:bg-ctp-mantle">' + cells.map((c) => `<th class="text-left px-3 py-2 text-xs font-semibold text-gray-600 dark:text-ctp-subtext1">${c}</th>`).join('') + '</tr>\n'
         i++ // skip separator
       } else {
-        html += '  <tr>' + cells.map((c) => `<td>${c}</td>`).join('') + '</tr>\n'
+        html += '  <tr class="border-b border-gray-200 dark:border-ctp-surface1">' + cells.map((c) => `<td class="px-3 py-2 text-sm text-gray-700 dark:text-ctp-subtext0">${c}</td>`).join('') + '</tr>\n'
       }
       continue
     }
