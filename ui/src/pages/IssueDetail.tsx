@@ -100,7 +100,7 @@ export default function IssueDetail({ issueId, onBack }: Props) {
               <p className="text-xs font-semibold text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide mb-2">Code</p>
               <div className="bg-gray-50 dark:bg-ctp-mantle border border-gray-200 dark:border-ctp-surface1 rounded overflow-hidden">
                 <pre className="text-xs font-mono leading-relaxed overflow-x-auto p-0">
-                  {snippet.lines.map((l) => (
+                  {(snippet.lines || []).map((l) => (
                     <div
                       key={l.number}
                       className={`flex ${l.is_issue ? 'bg-red-50 dark:bg-red-950/30 border-l-2 border-red-500' : ''}`}

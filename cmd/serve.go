@@ -71,7 +71,14 @@ func NewServeCommand() *cobra.Command {
 				server.Shutdown(shutdownCtx)
 			}()
 
-			return server.Start(uiPort)
+			actualPort, err := server.Start(uiPort)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stderr, "Web UI at http://localhost:%d\n", actualPort)
+			// block until signal
+			<-sigCh
+			return nil
 		},
 	}
 

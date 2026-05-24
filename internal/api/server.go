@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/rapando/gopolice/internal/cache"
@@ -97,13 +99,33 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /", s.handleStatic)
 }
 
-func (s *Server) Start(port int) error {
-	s.server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: corsMiddleware(s.mux),
+func (s *Server) Start(port int) (int, error) {
+	maxAttempts := 100
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		addr := fmt.Sprintf(":%d", port+attempt)
+		listener, err := net.Listen("tcp", addr)
+		if err == nil {
+			s.server = &http.Server{
+				Handler: corsMiddleware(s.mux),
+			}
+			actualPort := port + attempt
+			log.Printf("gopolice UI available at http://localhost:%d", actualPort)
+			return actualPort, s.server.Serve(listener)
+		}
+		if !isAddrInUse(err) {
+			return 0, err
+		}
 	}
-	log.Printf("gopolice UI available at http://localhost:%d", port)
-	return s.server.ListenAndServe()
+	return 0, fmt.Errorf("no available port found after %d attempts", maxAttempts)
+}
+
+func isAddrInUse(err error) bool {
+	if opErr, ok := err.(*net.OpError); ok {
+		if sysErr, ok := opErr.Err.(*os.SyscallError); ok {
+			return sysErr.Err == syscall.EADDRINUSE
+		}
+	}
+	return false
 }
 
 func (s *Server) Watch(debounce time.Duration) (*watcher.Watcher, error) {
@@ -589,7 +611,7 @@ func (s *Server) handleSnippet(w http.ResponseWriter, r *http.Request) {
 		IsIssue bool   `json:"is_issue"`
 	}
 
-	var snippet []snippetLine
+	snippet := make([]snippetLine, 0)
 	for i := start; i <= end; i++ {
 		snippet = append(snippet, snippetLine{
 			Number:  i,

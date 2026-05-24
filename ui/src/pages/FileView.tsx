@@ -73,7 +73,7 @@ export default function FileView({ filePath, issues, onBack }: Props) {
 
                 {snippet && (
                   <pre className="text-xs font-mono leading-relaxed overflow-x-auto border-t border-gray-200 dark:border-ctp-surface1">
-                    {snippet.lines.map((l) => (
+                    {(snippet.lines || []).map((l) => (
                       <div
                         key={l.number}
                         className={`flex ${l.is_issue ? 'bg-red-50 dark:bg-red-950/30 border-l-2 border-red-500' : ''}`}

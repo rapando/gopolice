@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/rapando/gopolice/internal/api"
 	"github.com/rapando/gopolice/internal/config"
@@ -93,16 +94,28 @@ func runScanAndServe(c *cobra.Command, cfg *config.Config, noOpen bool) error {
 			uiPort = 9393
 		}
 
-		if !noOpen {
-			openBrowser(fmt.Sprintf("http://localhost:%d", uiPort))
-		}
-
+		portCh := make(chan int, 1)
 		go func() {
-			c.PrintErr(fmt.Sprintf("Web UI at http://localhost:%d\n", uiPort))
-			if err := server.Start(uiPort); err != nil {
+			actualPort, err := server.Start(uiPort)
+			if err != nil {
 				c.PrintErr(fmt.Sprintf("Server error: %v\n", err))
+				close(portCh)
+				return
 			}
+			portCh <- actualPort
+			c.PrintErr(fmt.Sprintf("Web UI at http://localhost:%d\n", actualPort))
 		}()
+
+		select {
+		case actualPort := <-portCh:
+			if !noOpen {
+				openBrowser(fmt.Sprintf("http://localhost:%d", actualPort))
+			}
+		case <-time.After(500 * time.Millisecond):
+			if !noOpen {
+				openBrowser(fmt.Sprintf("http://localhost:%d", uiPort))
+			}
+		}
 
 		<-sigCh
 		c.PrintErr("Shutting down...\n")
