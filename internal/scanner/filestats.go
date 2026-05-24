@@ -32,6 +32,8 @@ func (s *FileStatsScanner) Run(ctx context.Context, cfg *config.Config, progress
 
 	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Gathering file statistics"}
 
+	skipDir := NewGitIgnoreFilter(projectDir)
+
 	var fileStats []model.FileStat
 	totalFiles := 0
 	goFiles := 0
@@ -42,6 +44,9 @@ func (s *FileStatsScanner) Run(ctx context.Context, cfg *config.Config, progress
 			return nil
 		}
 		if info.IsDir() {
+			if skipDir(path) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 

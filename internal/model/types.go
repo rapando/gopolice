@@ -19,6 +19,7 @@ const (
 	CategoryComplexity Category = "complexity"
 	CategoryTest       Category = "test"
 	CategoryPerf       Category = "performance"
+	CategoryDeadCode   Category = "deadcode"
 )
 
 type Issue struct {
@@ -32,6 +33,7 @@ type Issue struct {
 	Message  string   `json:"message"`
 	Category Category `json:"category"`
 	Solution string   `json:"solution,omitempty"`
+	Module   string   `json:"module,omitempty"`
 	GitBlame *BlameInfo `json:"git_blame,omitempty"`
 }
 
@@ -79,6 +81,29 @@ type Dependency struct {
 	Indirect bool   `json:"indirect"`
 }
 
+type DepEdge struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+type DepGraph struct {
+	Edges []DepEdge `json:"edges"`
+}
+
+type TrendPoint struct {
+	Timestamp   time.Time `json:"timestamp"`
+	Errors      int       `json:"errors"`
+	Warnings    int       `json:"warnings"`
+	Infos       int       `json:"infos"`
+	Grade       string    `json:"grade"`
+	Coverage    float64   `json:"coverage"`
+	BenchNSOp   float64   `json:"bench_ns_op"`
+}
+
+type TrendsData struct {
+	Points []TrendPoint `json:"points"`
+}
+
 type AuthorInfo struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
@@ -118,12 +143,15 @@ type ScanResult struct {
 	Issues      []Issue       `json:"issues"`
 	TestResults *TestResult   `json:"test_results,omitempty"`
 	Benchmarks  []BenchmarkResult `json:"benchmarks,omitempty"`
+	Profile     *ProfileData      `json:"profile,omitempty"`
+	DepGraph    *DepGraph         `json:"dep_graph,omitempty"`
 	Deps        []Dependency  `json:"deps,omitempty"`
 	GitInfo     *GitInfo      `json:"git_info,omitempty"`
 	FileStats   []FileStat    `json:"file_stats,omitempty"`
 	TotalFiles  int           `json:"total_files"`
 	GoFiles     int           `json:"go_files"`
 	TotalLines  int           `json:"total_lines"`
+	Modules     []string      `json:"modules,omitempty"`
 }
 
 type BenchmarkResult struct {
@@ -132,4 +160,17 @@ type BenchmarkResult struct {
 	TimePerOp  time.Duration `json:"time_per_op"`
 	BytesPerOp int64         `json:"bytes_per_op"`
 	AllocsPerOp int64        `json:"allocs_per_op"`
+}
+
+type ProfileData struct {
+	CPU []ProfileEntry `json:"cpu,omitempty"`
+	Mem []ProfileEntry `json:"mem,omitempty"`
+}
+
+type ProfileEntry struct {
+	Function string  `json:"function"`
+	Flat     float64 `json:"flat"`
+	FlatPct  float64 `json:"flat_pct"`
+	Cum      float64 `json:"cum"`
+	CumPct   float64 `json:"cum_pct"`
 }

@@ -1,4 +1,5 @@
 import { ScanResult, computeGrade } from '../api/client'
+import Trends from '../components/Trends'
 
 interface Props {
   result: ScanResult | null
@@ -64,6 +65,7 @@ export default function Dashboard({ result, scanLog, scanning, onScan }: Props) 
           <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text">{result.project_name}</h2>
           <span className="text-xs text-gray-400 dark:text-ctp-overlay1 font-mono">
             {result.go_files} files &middot; {result.total_lines.toLocaleString()} lines
+            {result.modules && <span className="ml-2 px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 dark:bg-ctp-mauve/20 dark:text-ctp-mauve">{result.modules.length} modules</span>}
           </span>
         </div>
         <p className="text-xs text-gray-400 dark:text-ctp-overlay1">
@@ -93,6 +95,8 @@ export default function Dashboard({ result, scanLog, scanning, onScan }: Props) 
           ))}
         </div>
       )}
+
+      <Trends />
 
       {result.issues.length > 0 && (
         <div className="card mb-6">

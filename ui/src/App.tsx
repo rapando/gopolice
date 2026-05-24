@@ -5,6 +5,9 @@ import IssueDetail from './pages/IssueDetail'
 import FileView from './pages/FileView'
 import Tests from './pages/Tests'
 import TestDetail from './pages/TestDetail'
+import Performance from './pages/Performance'
+import DeadCode from './pages/DeadCode'
+import DepGraph from './pages/DepGraph'
 import Security from './pages/Security'
 import GitStats from './pages/GitStats'
 import ConfigPage from './pages/Config'
@@ -12,7 +15,7 @@ import History from './pages/History'
 import Layout from './components/Layout'
 import { getResults, subscribeStatus, ProgressEvent, ScanResult, triggerScan } from './api/client'
 
-type Page = 'dashboard' | 'issues' | 'issue' | 'file' | 'tests' | 'testdetail' | 'history' | 'security' | 'git' | 'config'
+type Page = 'dashboard' | 'issues' | 'issue' | 'file' | 'tests' | 'testdetail' | 'performance' | 'deadcode' | 'depgraph' | 'history' | 'security' | 'git' | 'config'
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
@@ -103,6 +106,12 @@ export default function App() {
         <Tests testResult={result?.test_results ?? null} onScan={handleScan} scanning={scanning} onSelectTest={navigateTest} />
       ) : page === 'testdetail' ? (
         <TestDetail testResult={result?.test_results ?? null} issues={result?.issues ?? []} pkgName={selectedPkg} testName={selectedTest} onBack={() => navigate('tests')} />
+      ) : page === 'performance' ? (
+        <Performance benchmarks={result?.benchmarks ?? null} profile={result?.profile ?? null} onScan={handleScan} scanning={scanning} />
+      ) : page === 'deadcode' ? (
+        <DeadCode issues={result?.issues ?? []} onSelectIssue={(id) => navigate('issue', id)} onSelectFile={(f) => navigate('file', f)} />
+      ) : page === 'depgraph' ? (
+        <DepGraph depGraph={result?.dep_graph ?? null} onScan={handleScan} scanning={scanning} />
       ) : page === 'security' ? (
         <Security issues={result?.issues ?? []} onSelectIssue={(id) => navigate('issue', id)} />
       ) : page === 'git' ? (

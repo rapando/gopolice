@@ -555,7 +555,33 @@ func TestFileStatsScanner_NoExcludeDirs(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 	data := result.Data.(*model.ScanResult)
-	if data.GoFiles != 2 {
-		t.Errorf("expected 2 go files (vendor included since no excludes), got %d", data.GoFiles)
+	if data.GoFiles != 1 {
+		t.Errorf("expected 1 go file (vendor skipped by default filter), got %d", data.GoFiles)
 	}
 }
+
+func BenchmarkMapSeverity(b *testing.B) {
+	levels := []string{"error", "warning", "info", "unknown", "fatal", "debug"}
+	for i := 0; i < b.N; i++ {
+		mapSeverity(levels[i%len(levels)])
+	}
+}
+
+func BenchmarkModuleName(b *testing.B) {
+	paths := []string{".", "/home/user/go/src/github.com/foo/bar", "/tmp/project"}
+	for i := 0; i < b.N; i++ {
+		moduleName(paths[i%len(paths)])
+	}
+}
+
+func BenchmarkParseBenchOutput(b *testing.B) {
+	output := `BenchmarkAdd-8   	100000000	        12.34 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSubtract-8   	50000000	        25.67 ns/op	       0 B/op	       0 allocs/op
+BenchmarkDivide-8   	30000000	        40.12 ns/op	       0 B/op	       0 allocs/op
+`
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		parseBenchOutput(output)
+	}
+}
+

@@ -38,6 +38,7 @@ func (s *ComplexityScanner) Run(ctx context.Context, cfg *config.Config, progres
 
 	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Analyzing code complexity"}
 
+	skipDir := NewGitIgnoreFilter(projectDir)
 	threshold := s.Threshold
 
 	var allIssues []model.Issue
@@ -47,6 +48,9 @@ func (s *ComplexityScanner) Run(ctx context.Context, cfg *config.Config, progres
 			return nil
 		}
 		if info.IsDir() {
+			if skipDir(path) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !strings.HasSuffix(info.Name(), ".go") || strings.HasSuffix(info.Name(), "_test.go") {

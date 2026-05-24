@@ -49,7 +49,6 @@ func runScanAndServe(c *cobra.Command, cfg *config.Config, noOpen bool) error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	p := scanner.NewDefaultPipeline()
 	progress := make(chan scanner.ProgressEvent, 100)
 
 	c.PrintErr("gopolice scan starting...\n")
@@ -67,11 +66,20 @@ func runScanAndServe(c *cobra.Command, cfg *config.Config, noOpen bool) error {
 
 	resultCh := make(chan struct{})
 	go func() {
-		result, err := p.Run(ctx, cfg, progress)
+		result, err := scanner.RunWorkspaceScan(ctx, cfg, progress)
 		if err != nil {
 			c.PrintErr(fmt.Sprintf("Scan failed: %v\n", err))
 			close(resultCh)
 			return
+		}
+		if result == nil {
+			p := scanner.NewDefaultPipeline()
+			result, err = p.Run(ctx, cfg, progress)
+			if err != nil {
+				c.PrintErr(fmt.Sprintf("Scan failed: %v\n", err))
+				close(resultCh)
+				return
+			}
 		}
 		c.PrintErr(fmt.Sprintf("Scan complete: %d issues found in %v\n", len(result.Issues), result.Duration))
 

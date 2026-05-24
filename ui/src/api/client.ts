@@ -11,6 +11,7 @@ export interface Issue {
   message: string
   category: string
   solution: string
+  module: string
   git_blame: BlameInfo | null
 }
 
@@ -28,12 +29,37 @@ export interface ScanResult {
   duration: number
   issues: Issue[]
   test_results: TestResult | null
+  benchmarks: BenchmarkResult[] | null
+  profile: ProfileData | null
+  dep_graph: DepGraph | null
   deps: Dependency[] | null
   git_info: GitInfo | null
   file_stats: FileStat[] | null
   total_files: number
   go_files: number
   total_lines: number
+  modules: string[] | null
+}
+
+export interface BenchmarkResult {
+  name: string
+  iterations: number
+  time_per_op: number
+  bytes_per_op: number
+  allocs_per_op: number
+}
+
+export interface ProfileData {
+  cpu: ProfileEntry[] | null
+  mem: ProfileEntry[] | null
+}
+
+export interface ProfileEntry {
+  function: string
+  flat: number
+  flat_pct: number
+  cum: number
+  cum_pct: number
 }
 
 export interface TestResult {
@@ -69,6 +95,15 @@ export interface Dependency {
   path: string
   version: string
   indirect: boolean
+}
+
+export interface DepEdge {
+  from: string
+  to: string
+}
+
+export interface DepGraph {
+  edges: DepEdge[]
 }
 
 export interface AuthorInfo {
@@ -156,7 +191,15 @@ export function getIssue(id: string): Promise<Issue> {
 }
 
 export function getTests(): Promise<TestResult> {
-  return request<TestResult>('/api/results/tests')
+  return request('/api/results/tests')
+}
+
+export function getBenchmarks(): Promise<BenchmarkResult[]> {
+  return request('/api/results/benchmarks')
+}
+
+export function getProfile(): Promise<ProfileData> {
+  return request('/api/results/profile')
 }
 
 export function getGitInfo(): Promise<GitInfo> {
@@ -165,6 +208,10 @@ export function getGitInfo(): Promise<GitInfo> {
 
 export function getDeps(): Promise<Dependency[]> {
   return request<Dependency[]>('/api/results/deps')
+}
+
+export function getDepGraph(): Promise<DepGraph> {
+  return request<DepGraph>('/api/results/deps/graph')
 }
 
 export interface HistoryEntry {
@@ -198,6 +245,24 @@ export function getHistoryDiff(from: string, to: string): Promise<DiffResult> {
   return request(`/api/history/diff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
 }
 
+export interface TrendPoint {
+  timestamp: string
+  errors: number
+  warnings: number
+  infos: number
+  grade: string
+  coverage: number
+  bench_ns_op: number
+}
+
+export interface TrendsData {
+  points: TrendPoint[]
+}
+
+export function getTrends(): Promise<TrendsData> {
+  return request('/api/history/trends')
+}
+
 export function deleteHistoryEntry(id: string): Promise<{ status: string }> {
   return request(`/api/history/entry/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
@@ -228,6 +293,16 @@ export function updateGlobalConfig(cfg: any): Promise<{ status: string }> {
 
 export function applyFix(id: string): Promise<FixResult> {
   return request<FixResult>(`/api/fix/${encodeURIComponent(id)}`, { method: 'POST' })
+}
+
+export interface BatchFixItem {
+  id: string
+  applied: boolean
+  message: string
+}
+
+export function batchFix(ids: string[]): Promise<{ results: BatchFixItem[] }> {
+  return request('/api/fix/batch', { method: 'POST', body: JSON.stringify({ issue_ids: ids }) })
 }
 
 export function undoFix(id: string): Promise<{ status: string }> {
@@ -292,6 +367,7 @@ export function categoryColor(c: string): string {
     case 'style': return 'text-gray-600'
     case 'complexity': return 'text-purple-700'
     case 'test': return 'text-green-700'
+    case 'deadcode': return 'text-rose-700'
     default: return 'text-gray-600'
   }
 }

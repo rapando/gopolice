@@ -176,6 +176,69 @@ func Delete(projectDir string, ts string) error {
 	return os.Remove(path)
 }
 
+func GetTrends(projectDir string) (*model.TrendsData, error) {
+	entries, err := List(projectDir)
+	if err != nil {
+		return nil, err
+	}
+	points := make([]model.TrendPoint, 0, len(entries))
+	for _, e := range entries {
+		if e.ScanResult == nil {
+			continue
+		}
+		sr := e.ScanResult
+
+		var errors, warnings, infos int
+		for _, iss := range sr.Issues {
+			switch iss.Severity {
+			case model.SeverityError:
+				errors++
+			case model.SeverityWarning:
+				warnings++
+			default:
+				infos++
+			}
+		}
+
+		var coverage float64
+		var covCount int
+		if sr.TestResults != nil {
+			for _, pkg := range sr.TestResults.Packages {
+				if pkg.Coverage > 0 {
+					coverage += pkg.Coverage
+					covCount++
+				}
+			}
+			if covCount > 0 {
+				coverage /= float64(covCount)
+			}
+		}
+
+		var benchNSOp float64
+		if len(sr.Benchmarks) > 0 {
+			var total float64
+			for _, b := range sr.Benchmarks {
+				total += float64(b.TimePerOp)
+			}
+			benchNSOp = total / float64(len(sr.Benchmarks))
+		}
+
+		points = append(points, model.TrendPoint{
+			Timestamp: e.Timestamp,
+			Errors:    errors,
+			Warnings:  warnings,
+			Infos:     infos,
+			Grade:     e.Grade,
+			Coverage:  coverage,
+			BenchNSOp: benchNSOp,
+		})
+	}
+	sort.Slice(points, func(i, j int) bool {
+		return points[i].Timestamp.Before(points[j].Timestamp)
+	})
+	return &model.TrendsData{Points: points}, nil
+}
+
 func Diff(from, to *model.ScanResult) *DiffResult {
 	fromIDs := make(map[string]bool, len(from.Issues))
 	for _, issue := range from.Issues {

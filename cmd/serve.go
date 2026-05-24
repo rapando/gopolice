@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/rapando/gopolice/internal/api"
 	"github.com/rapando/gopolice/internal/cache"
@@ -12,6 +16,7 @@ import (
 
 func NewServeCommand() *cobra.Command {
 	var port int
+	var watch bool
 
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -46,10 +51,31 @@ func NewServeCommand() *cobra.Command {
 
 			fmt.Fprintf(os.Stderr, "Serving cached result from %s\n", cachePath)
 			fmt.Fprintf(os.Stderr, "Web UI at http://localhost:%d\n", uiPort)
+
+			if watch {
+				w, err := server.Watch(500 * time.Millisecond)
+				if err != nil {
+					return fmt.Errorf("file watcher: %w", err)
+				}
+				defer w.Stop()
+				fmt.Fprintf(os.Stderr, "Watching .go files for changes (--watch enabled)\n")
+			}
+
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+			go func() {
+				<-sigCh
+				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer shutdownCancel()
+				server.Shutdown(shutdownCtx)
+			}()
+
 			return server.Start(uiPort)
 		},
 	}
 
 	cmd.Flags().IntVarP(&port, "port", "p", 0, "Port for the web UI")
+	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "Watch .go files and re-scan on change")
 	return cmd
 }
