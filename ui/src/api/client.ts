@@ -28,12 +28,21 @@ export interface ScanResult {
   duration: number
   issues: Issue[]
   test_results: TestResult | null
+  benchmarks: BenchmarkResult[] | null
   deps: Dependency[] | null
   git_info: GitInfo | null
   file_stats: FileStat[] | null
   total_files: number
   go_files: number
   total_lines: number
+}
+
+export interface BenchmarkResult {
+  name: string
+  iterations: number
+  time_per_op: number
+  bytes_per_op: number
+  allocs_per_op: number
 }
 
 export interface TestResult {
@@ -156,7 +165,11 @@ export function getIssue(id: string): Promise<Issue> {
 }
 
 export function getTests(): Promise<TestResult> {
-  return request<TestResult>('/api/results/tests')
+  return request('/api/results/tests')
+}
+
+export function getBenchmarks(): Promise<BenchmarkResult[]> {
+  return request('/api/results/benchmarks')
 }
 
 export function getGitInfo(): Promise<GitInfo> {

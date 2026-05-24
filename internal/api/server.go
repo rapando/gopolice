@@ -74,6 +74,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/results/issues", s.handleListIssues)
 	s.mux.HandleFunc("GET /api/results/issues/{id}", s.handleGetIssue)
 	s.mux.HandleFunc("GET /api/results/tests", s.handleGetTests)
+	s.mux.HandleFunc("GET /api/results/benchmarks", s.handleGetBenchmarks)
 	s.mux.HandleFunc("GET /api/results/git", s.handleGetGit)
 	s.mux.HandleFunc("GET /api/results/deps", s.handleGetDeps)
 	s.mux.HandleFunc("GET /api/config", s.handleGetMergedConfig)
@@ -307,6 +308,15 @@ func (s *Server) handleGetTests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, result.TestResults)
+}
+
+func (s *Server) handleGetBenchmarks(w http.ResponseWriter, r *http.Request) {
+	result := s.store.Get()
+	if result == nil || result.Benchmarks == nil {
+		jsonError(w, http.StatusNotFound, "no benchmark results available")
+		return
+	}
+	jsonResponse(w, http.StatusOK, result.Benchmarks)
 }
 
 func (s *Server) handleGetGit(w http.ResponseWriter, r *http.Request) {

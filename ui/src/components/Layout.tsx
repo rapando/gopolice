@@ -16,6 +16,7 @@ const navItems = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'issues', label: 'Issues' },
   { id: 'tests', label: 'Tests' },
+  { id: 'benchmarks', label: 'Benchmarks' },
   { id: 'history', label: 'History' },
   { id: 'security', label: 'Security' },
   { id: 'git', label: 'Git' },

@@ -5,6 +5,7 @@ import IssueDetail from './pages/IssueDetail'
 import FileView from './pages/FileView'
 import Tests from './pages/Tests'
 import TestDetail from './pages/TestDetail'
+import Benchmarks from './pages/Benchmarks'
 import Security from './pages/Security'
 import GitStats from './pages/GitStats'
 import ConfigPage from './pages/Config'
@@ -12,7 +13,7 @@ import History from './pages/History'
 import Layout from './components/Layout'
 import { getResults, subscribeStatus, ProgressEvent, ScanResult, triggerScan } from './api/client'
 
-type Page = 'dashboard' | 'issues' | 'issue' | 'file' | 'tests' | 'testdetail' | 'history' | 'security' | 'git' | 'config'
+type Page = 'dashboard' | 'issues' | 'issue' | 'file' | 'tests' | 'testdetail' | 'benchmarks' | 'history' | 'security' | 'git' | 'config'
 
 export default function App() {
   const [page, setPage] = useState<Page>('dashboard')
@@ -103,6 +104,8 @@ export default function App() {
         <Tests testResult={result?.test_results ?? null} onScan={handleScan} scanning={scanning} onSelectTest={navigateTest} />
       ) : page === 'testdetail' ? (
         <TestDetail testResult={result?.test_results ?? null} issues={result?.issues ?? []} pkgName={selectedPkg} testName={selectedTest} onBack={() => navigate('tests')} />
+      ) : page === 'benchmarks' ? (
+        <Benchmarks benchmarks={result?.benchmarks ?? null} onScan={handleScan} scanning={scanning} />
       ) : page === 'security' ? (
         <Security issues={result?.issues ?? []} onSelectIssue={(id) => navigate('issue', id)} />
       ) : page === 'git' ? (

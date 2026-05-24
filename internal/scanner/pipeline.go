@@ -26,6 +26,7 @@ func NewDefaultPipeline() *Pipeline {
 		NewLintScanner(),
 		NewSecurityScanner(),
 		NewTestScanner(),
+		NewBenchmarkScanner(),
 		NewComplexityScanner(),
 		NewFileStatsScanner(),
 		NewGitScanner(),
@@ -75,6 +76,8 @@ func (p *Pipeline) Run(ctx context.Context, cfg *config.Config, progress chan<- 
 		switch data := r.Data.(type) {
 		case *model.TestResult:
 			result.TestResults = data
+		case []model.BenchmarkResult:
+			result.Benchmarks = data
 		case *model.GitInfo:
 			result.GitInfo = data
 		case *model.ScanResult:
