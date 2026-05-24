@@ -187,7 +187,7 @@ export function listIssues(filters?: Record<string, string>): Promise<Issue[]> {
 }
 
 export function getIssue(id: string): Promise<Issue> {
-  return request<Issue>(`/api/results/issues/${encodeURIComponent(id)}`)
+  return request<Issue>(`/api/results/issues?id=${encodeURIComponent(id)}`)
 }
 
 export function getTests(): Promise<TestResult> {

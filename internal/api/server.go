@@ -75,8 +75,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/scan", s.handleScan)
 	s.mux.HandleFunc("GET /api/scan/status", s.handleScanStatus)
 	s.mux.HandleFunc("GET /api/results", s.handleGetResults)
-	s.mux.HandleFunc("GET /api/results/issues", s.handleListIssues)
-	s.mux.HandleFunc("GET /api/results/issues/{id}", s.handleGetIssue)
+	s.mux.HandleFunc("GET /api/results/issues", s.handleGetIssue)
 	s.mux.HandleFunc("GET /api/results/tests", s.handleGetTests)
 	s.mux.HandleFunc("GET /api/results/benchmarks", s.handleGetBenchmarks)
 	s.mux.HandleFunc("GET /api/results/profile", s.handleGetProfile)
@@ -275,7 +274,24 @@ func (s *Server) handleGetResults(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, result)
 }
 
-func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id != "" {
+		result := s.store.Get()
+		if result == nil {
+			jsonError(w, http.StatusNotFound, "no scan results available")
+			return
+		}
+		for _, issue := range result.Issues {
+			if issue.ID == id {
+				jsonResponse(w, http.StatusOK, issue)
+				return
+			}
+		}
+		jsonError(w, http.StatusNotFound, "issue not found")
+		return
+	}
+
 	result := s.store.Get()
 	if result == nil {
 		jsonError(w, http.StatusNotFound, "no scan results available")
@@ -329,22 +345,6 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 		issues = []model.Issue{}
 	}
 	jsonResponse(w, http.StatusOK, issues)
-}
-
-func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	result := s.store.Get()
-	if result == nil {
-		jsonError(w, http.StatusNotFound, "no scan results available")
-		return
-	}
-	for _, issue := range result.Issues {
-		if issue.ID == id {
-			jsonResponse(w, http.StatusOK, issue)
-			return
-		}
-	}
-	jsonError(w, http.StatusNotFound, "issue not found")
 }
 
 func (s *Server) handleGetTests(w http.ResponseWriter, r *http.Request) {
