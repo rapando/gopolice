@@ -61,13 +61,15 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
     }
 
     try {
+      const container = svg.append('g').attr('class', 'graph-container')
+
       const simulation = d3.forceSimulation<GraphNode>(nodes)
         .force('link', d3.forceLink<GraphNode, GraphLink>(links).id((d) => d.id).distance(120))
         .force('charge', d3.forceManyBody().strength(-400))
         .force('center', d3.forceCenter(width / 2, height / 2))
         .force('collision', d3.forceCollide().radius(30))
 
-      const defs = svg.append('defs')
+      const defs = container.append('defs')
       defs.append('marker')
         .attr('id', 'arrowhead')
         .attr('viewBox', '0 -5 10 10')
@@ -80,7 +82,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
         .attr('d', 'M0,-5L10,0L0,5')
         .attr('fill', '#94a3b8')
 
-      const link = svg.append('g')
+      const link = container.append('g')
         .selectAll<SVGLineElement, GraphLink>('line')
         .data(links)
         .join('line')
@@ -89,7 +91,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
         .attr('stroke-opacity', 0.6)
         .attr('marker-end', 'url(#arrowhead)')
 
-      const group = svg.append('g')
+      const group = container.append('g')
         .selectAll<SVGGElement, GraphNode>('g')
         .data(nodes)
         .join('g')
@@ -119,7 +121,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
       const zoom = d3.zoom<SVGSVGElement, unknown>()
         .scaleExtent([0.1, 4])
         .on('zoom', (event) => {
-          svg.select('g').attr('transform', event.transform)
+          container.attr('transform', event.transform)
         })
 
       svg.call(zoom)

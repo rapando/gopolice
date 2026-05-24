@@ -39,3 +39,21 @@ func TestFailing(t *testing.T) {
 		t.Errorf("expected 3, got %d", result)
 	}
 }
+
+func BenchmarkAdd(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		Add(2, 3)
+	}
+}
+
+func BenchmarkSubtract(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		Subtract(10, 4)
+	}
+}
+
+func BenchmarkDivide(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		Divide(10, 2)
+	}
+}
