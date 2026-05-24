@@ -19,11 +19,45 @@ A web UI reporting tool for Go projects. Scans for code quality, security vulner
 
 ## Install
 
+### Option 1: `go install` (recommended)
+
 ```bash
 go install github.com/rapando/gopolice@latest
 ```
 
 The web UI is pre-built and embedded into the binary. No Node.js required.
+
+After installing, verify with:
+
+```bash
+gopolice version
+```
+
+If the version shown is not what you expect, make sure `$(go env GOPATH)/bin` is in your `PATH` and no old binary is shadowing it (`which gopolice` will show you the location).
+
+### Option 2: Download a release binary
+
+Download the latest release for your platform from the [Releases page](https://github.com/rapando/gopolice/releases), extract it, and place the `gopolice` binary somewhere in your `PATH`.
+
+### Option 3: Build from source
+
+```bash
+git clone https://github.com/rapando/gopolice.git
+cd gopolice
+make install
+```
+
+This embeds the exact git tag as the version via ldflags.
+
+## Update
+
+Run the same install command you used initially:
+
+```bash
+go install github.com/rapando/gopolice@latest
+```
+
+`go install` always fetches the latest tagged release. Verify with `gopolice version` after updating.
 
 ## Usage
 
