@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { getSnippet, batchFix, Issue, Snippet } from '../api/client'
+import FixPlan from '../components/FixPlan'
 
 interface Props {
   issues: Issue[]
   onSelectIssue: (id: string) => void
   onSelectFile: (file: string) => void
+  projectName?: string
 }
 
 const severities = ['error', 'warning', 'info'] as const
@@ -29,7 +31,7 @@ function groupKey(issue: Issue, by: GroupBy): string {
   return ''
 }
 
-export default function Issues({ issues, onSelectIssue, onSelectFile }: Props) {
+export default function Issues({ issues, onSelectIssue, onSelectFile, projectName }: Props) {
   const [selectedSeverity, setSelectedSeverity] = useState('')
   const [search, setSearch] = useState('')
   const [snippet, setSnippet] = useState<{ file: string; data: Snippet } | null>(null)
@@ -37,6 +39,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [batchMsg, setBatchMsg] = useState('')
   const [applying, setApplying] = useState(false)
+  const [showExport, setShowExport] = useState(false)
   const snippetRef = useRef<HTMLDivElement>(null)
 
   const filtered = issues.filter((i) => {
@@ -161,6 +164,12 @@ export default function Issues({ issues, onSelectIssue, onSelectFile }: Props) {
               {g || 'None'}
             </button>
           ))}
+          <button
+            onClick={() => setShowExport(true)}
+            className="ml-3 px-3 py-1 text-xs font-medium rounded bg-green-600 text-white dark:bg-ctp-green dark:text-ctp-base hover:bg-green-700 transition-colors"
+          >
+            Export Fixes
+          </button>
         </div>
       </div>
 
@@ -274,6 +283,14 @@ export default function Issues({ issues, onSelectIssue, onSelectFile }: Props) {
             </div>
           )}
         </>
+      )}
+
+      {showExport && (
+        <FixPlan
+          issues={issues}
+          projectName={projectName || 'project'}
+          onClose={() => setShowExport(false)}
+        />
       )}
     </div>
   )

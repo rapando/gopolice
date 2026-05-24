@@ -97,6 +97,7 @@ export default function App() {
           issues={result?.issues ?? []}
           onSelectIssue={(id) => navigate('issue', id)}
           onSelectFile={(f) => navigate('file', f)}
+          projectName={result?.project_name}
         />
       ) : page === 'issue' && selectedIssue ? (
         <IssueDetail issueId={selectedIssue} onBack={() => navigate('issues')} />
