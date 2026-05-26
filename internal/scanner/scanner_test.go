@@ -89,6 +89,31 @@ func TestParseTestOutput(t *testing.T) {
 	}
 }
 
+func TestParseTestOutput_Subtests(t *testing.T) {
+	input := `=== RUN   TestParent
+=== RUN   TestParent/Sub1
+=== PAUSE TestParent/Sub1
+=== RUN   TestParent/Sub2
+=== PAUSE TestParent/Sub2
+=== CONT  TestParent/Sub1
+=== CONT  TestParent/Sub2
+--- PASS: TestParent (0.00s)
+    --- PASS: TestParent/Sub2 (0.01s)
+    --- PASS: TestParent/Sub1 (0.02s)
+PASS
+ok  	github.com/example/pkg	0.500s`
+	result := parseTestOutput(input)
+	if len(result.Packages) != 1 {
+		t.Fatalf("expected 1 package, got %d", len(result.Packages))
+	}
+	if len(result.Packages[0].Tests) != 3 {
+		t.Fatalf("expected 3 tests (parent + 2 subtests), got %d", len(result.Packages[0].Tests))
+	}
+	if result.Total.Total != 3 {
+		t.Errorf("expected Total.Total=3, got %d", result.Total.Total)
+	}
+}
+
 func TestParseTestOutput_Empty(t *testing.T) {
 	result := parseTestOutput("")
 	if len(result.Packages) != 0 {

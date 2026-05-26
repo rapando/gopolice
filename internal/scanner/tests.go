@@ -30,7 +30,7 @@ func (s *TestScanner) Name() string {
 }
 
 var (
-	testResultRe = regexp.MustCompile(`^(?:=== RUN|--- (?:PASS|FAIL|SKIP):)\s+(.+?)(?:\s+\((\d+\.\d+)s\))?$`)
+	testResultRe = regexp.MustCompile(`^(?:\s*)(?:=== RUN|--- (?:PASS|FAIL|SKIP):)\s+(.+?)(?:\s+\((\d+\.\d+)s\))?$`)
 	testPkgRe    = regexp.MustCompile(`^(ok|FAIL|\?)\s+(\S+)\s+(?:(\d+\.\d+)s)?(?:\s+coverage:\s+(\d+\.\d+)%)?`)
 )
 
