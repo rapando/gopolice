@@ -74,6 +74,9 @@ func resolveWorkspaceModules(cfg *config.Config) ([]string, []string, error) {
 	}
 
 	workPath := filepath.Join(projectDir, "go.work")
+	if _, err := os.Stat(workPath); os.IsNotExist(err) {
+		return nil, nil, nil
+	}
 	wf, err := ParseWorkFile(workPath)
 	if err != nil {
 		return nil, nil, err
