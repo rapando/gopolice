@@ -44,12 +44,12 @@ func (s *ProfileScanner) Run(ctx context.Context, cfg *config.Config, progress c
 	if err != nil {
 		return nil, fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	cpuProfile := filepath.Join(tmpDir, "cpu.pprof")
 	memProfile := filepath.Join(tmpDir, "mem.pprof")
 
-	cmd := exec.CommandContext(ctx, "go", "test", "-bench=.", "-cpuprofile="+cpuProfile, "-memprofile="+memProfile, "-count=1", "./...")
+	cmd := exec.CommandContext(ctx, "go", "test", "-bench=.", "-cpuprofile="+cpuProfile, "-memprofile="+memProfile, "-count=1", "./...") //nolint:gosec // paths from MkdirTemp, not user input
 	cmd.Dir = projectDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {

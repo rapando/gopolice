@@ -186,7 +186,7 @@ func mapSeverity(s string) model.Severity {
 	}
 }
 
-func linterSolution(linter, text string) string {
+func linterSolution(linter string, _ string) string {
 	switch linter {
 	case "gofmt", "gofumpt", "gci":
 		return "This issue can be auto-fixed. Run the fix command or use the Apply Fix button to format the code automatically."
@@ -223,4 +223,3 @@ func hasTool(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
 }
-

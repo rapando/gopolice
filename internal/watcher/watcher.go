@@ -39,7 +39,7 @@ func New(root string, debounce time.Duration, onChange func()) (*Watcher, error)
 	}
 
 	if err := fw.addDirs(root); err != nil {
-		w.Close()
+		_ = w.Close()
 		return nil, err
 	}
 
@@ -140,7 +140,7 @@ func (fw *Watcher) handleEvent(event fsnotify.Event) {
 	if event.Op&fsnotify.Create != 0 {
 		if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 			if !fw.skipCheck(event.Name) {
-				fw.watcher.Add(event.Name)
+				_ = fw.watcher.Add(event.Name)
 			}
 		}
 	}

@@ -19,19 +19,19 @@ const (
 )
 
 type ProgressEvent struct {
-	Scanner string `json:"scanner"`
-	Status  Status `json:"status"`
-	Message string `json:"message,omitempty"`
-	Error   error  `json:"error,omitempty"`
+	Scanner string        `json:"scanner"`
+	Status  Status        `json:"status"`
+	Message string        `json:"message,omitempty"`
+	Error   error         `json:"error,omitempty"`
 	Elapsed time.Duration `json:"elapsed,omitempty"`
 }
 
 type Result struct {
-	ScannerName string          `json:"scanner_name"`
-	Issues      []model.Issue   `json:"issues"`
-	Duration    time.Duration   `json:"duration"`
-	Error       error           `json:"error,omitempty"`
-	Data        interface{}     `json:"data,omitempty"`
+	ScannerName string        `json:"scanner_name"`
+	Issues      []model.Issue `json:"issues"`
+	Duration    time.Duration `json:"duration"`
+	Error       error         `json:"error,omitempty"`
+	Data        interface{}   `json:"data,omitempty"`
 }
 
 type Scanner interface {

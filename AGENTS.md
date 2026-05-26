@@ -15,6 +15,7 @@
 
 ## Lint
 - `go vet ./...` — standard Go vet
+- `golangci-lint run ./...` — full lint suite (auto-detects project `.golangci.yml` or global `~/.config/golangci-lint/.golangci.yml`)
 
 ## Project structure
 - `cmd/` — cobra CLI commands

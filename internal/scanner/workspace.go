@@ -23,7 +23,7 @@ func ParseWorkFile(path string) (*WorkFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	wf := &WorkFile{}
 	scanner := bufio.NewScanner(f)
@@ -111,8 +111,11 @@ func resolveWorkspaceModules(cfg *config.Config) ([]string, []string, error) {
 
 func RunWorkspaceScan(ctx context.Context, cfg *config.Config, progress chan<- ProgressEvent) (*model.ScanResult, error) {
 	moduleDirs, moduleNames, err := resolveWorkspaceModules(cfg)
-	if err != nil || moduleDirs == nil {
-		return nil, nil
+	if err != nil {
+		return nil, err
+	}
+	if moduleDirs == nil {
+		return nil, nil //nolint:nilnil // nil/nil means "not a workspace", caller checks this
 	}
 
 	if progress != nil {
@@ -122,11 +125,6 @@ func RunWorkspaceScan(ctx context.Context, cfg *config.Config, progress chan<- P
 	combined := &model.ScanResult{
 		ScanTime: time.Now(),
 		Modules:  moduleNames,
-	}
-
-	projectDir := cfg.TargetDir
-	if projectDir == "" {
-		projectDir = "."
 	}
 
 	for i, modDir := range moduleDirs {

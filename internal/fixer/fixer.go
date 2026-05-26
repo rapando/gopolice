@@ -44,48 +44,47 @@ func ApplyFix(issue *model.Issue, projectDir string) (*FixResult, error) {
 		return nil, fmt.Errorf("backup failed: %w", err)
 	}
 
-	switch issue.Scanner {
-	case "golangci-lint":
+	if issue.Scanner == "golangci-lint" {
 		switch issue.Rule {
 		case "gofmt":
-			result, runErr := runGofmt(absPath)
+			result := runGofmt(absPath)
 			if result != nil {
 				result.Backup = backupPath
 			}
-			return result, runErr
+			return result, nil
 		case "gofumpt":
-			result, runErr := runGofumpt(absPath)
+			result := runGofumpt(absPath)
 			if result != nil {
 				result.Backup = backupPath
 			}
-			return result, runErr
+			return result, nil
 		case "gci":
-			result, runErr := runGci(absPath, projectDir)
+			result := runGci(absPath, projectDir)
 			if result != nil {
 				result.Backup = backupPath
 			}
-			return result, runErr
+			return result, nil
 		}
 	}
 
 	return &FixResult{Applied: false, Message: "no auto-fix available for this issue"}, nil
 }
 
-func runGofmt(path string) (*FixResult, error) {
+func runGofmt(path string) *FixResult {
 	cmd := exec.Command("gofmt", "-w", path)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return &FixResult{
 			Applied: false,
 			Message: fmt.Sprintf("gofmt failed: %s", string(output)),
-		}, nil
+		}
 	}
-	return &FixResult{Applied: true, Message: "file formatted with gofmt"}, nil
+	return &FixResult{Applied: true, Message: "file formatted with gofmt"}
 }
 
-func runGofumpt(path string) (*FixResult, error) {
+func runGofumpt(path string) *FixResult {
 	if _, err := exec.LookPath("gofumpt"); err != nil {
-		return &FixResult{Applied: false, Message: "gofumpt not installed"}, nil
+		return &FixResult{Applied: false, Message: "gofumpt not installed"}
 	}
 	cmd := exec.Command("gofumpt", "-w", path)
 	output, err := cmd.CombinedOutput()
@@ -93,14 +92,14 @@ func runGofumpt(path string) (*FixResult, error) {
 		return &FixResult{
 			Applied: false,
 			Message: fmt.Sprintf("gofumpt failed: %s", string(output)),
-		}, nil
+		}
 	}
-	return &FixResult{Applied: true, Message: "file formatted with gofumpt"}, nil
+	return &FixResult{Applied: true, Message: "file formatted with gofumpt"}
 }
 
-func runGci(path string, projectDir string) (*FixResult, error) {
+func runGci(path string, projectDir string) *FixResult {
 	if _, err := exec.LookPath("gci"); err != nil {
-		return &FixResult{Applied: false, Message: "gci not installed"}, nil
+		return &FixResult{Applied: false, Message: "gci not installed"}
 	}
 	cmd := exec.Command("gci", "write", path)
 	cmd.Dir = projectDir
@@ -109,9 +108,9 @@ func runGci(path string, projectDir string) (*FixResult, error) {
 		return &FixResult{
 			Applied: false,
 			Message: fmt.Sprintf("gci failed: %s", string(output)),
-		}, nil
+		}
 	}
-	return &FixResult{Applied: true, Message: "imports organized with gci"}, nil
+	return &FixResult{Applied: true, Message: "imports organized with gci"}
 }
 
 func createBackup(path string) (string, error) {
@@ -120,7 +119,7 @@ func createBackup(path string) (string, error) {
 		return "", err
 	}
 	backupPath := path + ".bak"
-	if err := os.WriteFile(backupPath, data, 0644); err != nil {
+	if err := os.WriteFile(backupPath, data, 0600); err != nil { //nolint:gosec // path is validated
 		return "", err
 	}
 	return backupPath, nil
@@ -139,10 +138,10 @@ func UndoFix(issue *model.Issue, projectDir string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(absPath, data, 0644); err != nil {
+	if err := os.WriteFile(absPath, data, 0600); err != nil { //nolint:gosec // path is validated
 		return err
 	}
-	os.Remove(backupPath)
+	_ = os.Remove(backupPath)
 	return nil
 }
 

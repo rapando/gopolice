@@ -169,7 +169,7 @@ func f() { switch x { case 1: case 2: default: } }`, parser.ParseComments)
 func TestCountFileLines(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "test.go")
-	os.WriteFile(path, []byte("line1\nline2\nline3\n"), 0644)
+	_ = os.WriteFile(path, []byte("line1\nline2\nline3\n"), 0600)
 	stat := countFileLines(path)
 	if stat.Lines != 3 {
 		t.Errorf("expected 3 lines, got %d", stat.Lines)
@@ -186,7 +186,7 @@ go 1.22
 require (
 	golang.org/x/text v0.3.0
 )`
-	os.WriteFile(path, []byte(content), 0644)
+	_ = os.WriteFile(path, []byte(content), 0600)
 
 	deps := parseGoMod(path)
 	if len(deps) == 0 {
@@ -275,7 +275,7 @@ func TestIsGitRepo(t *testing.T) {
 		t.Error("expected false for non-git dir")
 	}
 
-	exec.Command("git", "-C", tmpDir, "init").Run()
+	_ = exec.Command("git", "-C", tmpDir, "init").Run()
 	if !isGitRepo(tmpDir) {
 		t.Error("expected true for git dir")
 	}
@@ -315,13 +315,13 @@ func TestIssueFromTestResult_WithFailures(t *testing.T) {
 
 func TestFileStatsScanner(t *testing.T) {
 	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main\nfunc main() {}\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main\nfunc main() {}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# readme\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# readme\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.22\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.22\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -539,9 +539,9 @@ func TestPipeline_Scanners(t *testing.T) {
 
 func TestFileStatsScanner_NoExcludeDirs(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.MkdirAll(filepath.Join(tmpDir, "vendor"), 0755)
-	os.WriteFile(filepath.Join(tmpDir, "vendor", "dep.go"), []byte("package vendor\n"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main\n"), 0644)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "vendor"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "vendor", "dep.go"), []byte("package vendor\n"), 0600)
+	_ = os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main\n"), 0600)
 
 	scanner := NewFileStatsScanner()
 	cfg := testConfig(tmpDir)
@@ -562,14 +562,14 @@ func TestFileStatsScanner_NoExcludeDirs(t *testing.T) {
 
 func BenchmarkMapSeverity(b *testing.B) {
 	levels := []string{"error", "warning", "info", "unknown", "fatal", "debug"}
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		mapSeverity(levels[i%len(levels)])
 	}
 }
 
 func BenchmarkModuleName(b *testing.B) {
 	paths := []string{".", "/home/user/go/src/github.com/foo/bar", "/tmp/project"}
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		moduleName(paths[i%len(paths)])
 	}
 }
@@ -580,8 +580,7 @@ BenchmarkSubtract-8   	50000000	        25.67 ns/op	       0 B/op	       0 alloc
 BenchmarkDivide-8   	30000000	        40.12 ns/op	       0 B/op	       0 allocs/op
 `
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		parseBenchOutput(output)
 	}
 }
-

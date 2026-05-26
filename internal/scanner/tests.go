@@ -262,7 +262,10 @@ func (s *TestScanner) locateTestFileLocations(projectDir string, result *model.T
 		}
 		pkgDir := filepath.Join(projectDir, relDir)
 
-		testFileLocations := make(map[string]struct{ file string; line int })
+		testFileLocations := make(map[string]struct {
+			file string
+			line int
+		})
 
 		entries, err := os.ReadDir(pkgDir)
 		if err != nil {
@@ -286,7 +289,10 @@ func (s *TestScanner) locateTestFileLocations(projectDir string, result *model.T
 				}
 				pos := fset.Position(fd.Pos())
 				relPath, _ := filepath.Rel(projectDir, pos.Filename)
-				testFileLocations[fd.Name.Name] = struct{ file string; line int }{relPath, pos.Line}
+				testFileLocations[fd.Name.Name] = struct {
+					file string
+					line int
+				}{relPath, pos.Line}
 			}
 		}
 
@@ -332,4 +338,3 @@ func (s *TestScanner) issuesFromTestResult(tr *model.TestResult) []model.Issue {
 	}
 	return issues
 }
-
