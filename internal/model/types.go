@@ -23,17 +23,17 @@ const (
 )
 
 type Issue struct {
-	ID       string   `json:"id"`
-	Scanner  string   `json:"scanner"`
-	Rule     string   `json:"rule"`
-	Severity Severity `json:"severity"`
-	File     string   `json:"file"`
-	Line     int      `json:"line"`
-	Column   int      `json:"column"`
-	Message  string   `json:"message"`
-	Category Category `json:"category"`
-	Solution string   `json:"solution,omitempty"`
-	Module   string   `json:"module,omitempty"`
+	ID       string     `json:"id"`
+	Scanner  string     `json:"scanner"`
+	Rule     string     `json:"rule"`
+	Severity Severity   `json:"severity"`
+	File     string     `json:"file"`
+	Line     int        `json:"line"`
+	Column   int        `json:"column"`
+	Message  string     `json:"message"`
+	Category Category   `json:"category"`
+	Solution string     `json:"solution,omitempty"`
+	Module   string     `json:"module,omitempty"`
 	GitBlame *BlameInfo `json:"git_blame,omitempty"`
 }
 
@@ -91,13 +91,13 @@ type DepGraph struct {
 }
 
 type TrendPoint struct {
-	Timestamp   time.Time `json:"timestamp"`
-	Errors      int       `json:"errors"`
-	Warnings    int       `json:"warnings"`
-	Infos       int       `json:"infos"`
-	Grade       string    `json:"grade"`
-	Coverage    float64   `json:"coverage"`
-	BenchNSOp   float64   `json:"bench_ns_op"`
+	Timestamp time.Time `json:"timestamp"`
+	Errors    int       `json:"errors"`
+	Warnings  int       `json:"warnings"`
+	Infos     int       `json:"infos"`
+	Grade     string    `json:"grade"`
+	Coverage  float64   `json:"coverage"`
+	BenchNSOp float64   `json:"bench_ns_op"`
 }
 
 type TrendsData struct {
@@ -137,29 +137,29 @@ type FileStat struct {
 }
 
 type ScanResult struct {
-	ProjectName string        `json:"project_name"`
-	ScanTime    time.Time     `json:"scan_time"`
-	Duration    time.Duration `json:"duration"`
-	Issues      []Issue       `json:"issues"`
-	TestResults *TestResult   `json:"test_results,omitempty"`
+	ProjectName string            `json:"project_name"`
+	ScanTime    time.Time         `json:"scan_time"`
+	Duration    time.Duration     `json:"duration"`
+	Issues      []Issue           `json:"issues"`
+	TestResults *TestResult       `json:"test_results,omitempty"`
 	Benchmarks  []BenchmarkResult `json:"benchmarks,omitempty"`
 	Profile     *ProfileData      `json:"profile,omitempty"`
 	DepGraph    *DepGraph         `json:"dep_graph,omitempty"`
-	Deps        []Dependency  `json:"deps,omitempty"`
-	GitInfo     *GitInfo      `json:"git_info,omitempty"`
-	FileStats   []FileStat    `json:"file_stats,omitempty"`
-	TotalFiles  int           `json:"total_files"`
-	GoFiles     int           `json:"go_files"`
-	TotalLines  int           `json:"total_lines"`
-	Modules     []string      `json:"modules,omitempty"`
+	Deps        []Dependency      `json:"deps,omitempty"`
+	GitInfo     *GitInfo          `json:"git_info,omitempty"`
+	FileStats   []FileStat        `json:"file_stats,omitempty"`
+	TotalFiles  int               `json:"total_files"`
+	GoFiles     int               `json:"go_files"`
+	TotalLines  int               `json:"total_lines"`
+	Modules     []string          `json:"modules,omitempty"`
 }
 
 type BenchmarkResult struct {
-	Name       string        `json:"name"`
-	Iterations int           `json:"iterations"`
-	TimePerOp  time.Duration `json:"time_per_op"`
-	BytesPerOp int64         `json:"bytes_per_op"`
-	AllocsPerOp int64        `json:"allocs_per_op"`
+	Name        string        `json:"name"`
+	Iterations  int           `json:"iterations"`
+	TimePerOp   time.Duration `json:"time_per_op"`
+	BytesPerOp  int64         `json:"bytes_per_op"`
+	AllocsPerOp int64         `json:"allocs_per_op"`
 }
 
 type ProfileData struct {

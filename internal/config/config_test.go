@@ -90,15 +90,12 @@ func TestConfigPaths(t *testing.T) {
 
 func TestIsInsideGoProject(t *testing.T) {
 	tmpDir := t.TempDir()
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-
-	os.Chdir(tmpDir)
+	t.Chdir(tmpDir)
 	if config.IsInsideGoProject() {
 		t.Error("expected false for dir without go.mod")
 	}
 
-	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if !config.IsInsideGoProject() {
@@ -112,13 +109,11 @@ func TestFindProjectRoot(t *testing.T) {
 	if err := os.MkdirAll(subDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(subDir)
+	t.Chdir(subDir)
 
 	root := config.FindProjectRoot()
 	evalRoot, _ := filepath.EvalSymlinks(root)
@@ -147,8 +142,8 @@ func TestDefaultLoadConfig_WithGlobal(t *testing.T) {
 
 	cfg := config.DefaultConfig()
 	cfg.Port = 8888
-	os.MkdirAll(filepath.Join(tmpDir, ".config", "gopolice"), 0755)
-	config.SaveConfigFile(cfg, config.GlobalConfigPath())
+	_ = os.MkdirAll(filepath.Join(tmpDir, ".config", "gopolice"), 0755)
+	_ = config.SaveConfigFile(cfg, config.GlobalConfigPath())
 
 	loaded, err := config.DefaultLoadConfig()
 	if err != nil {

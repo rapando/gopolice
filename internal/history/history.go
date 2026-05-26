@@ -17,15 +17,15 @@ import (
 const tsFormat = "20060102T150405Z"
 
 type Entry struct {
-	ID          string               `json:"id"`
-	Timestamp   time.Time            `json:"timestamp"`
-	ProjectID   string               `json:"project_id"`
-	ProjectName string               `json:"project_name"`
-	TotalIssues int                  `json:"total_issues"`
-	TotalTests  int                  `json:"total_tests"`
-	Duration    time.Duration        `json:"duration"`
-	Grade       string               `json:"grade,omitempty"`
-	ScanResult  *model.ScanResult    `json:"-"`
+	ID          string            `json:"id"`
+	Timestamp   time.Time         `json:"timestamp"`
+	ProjectID   string            `json:"project_id"`
+	ProjectName string            `json:"project_name"`
+	TotalIssues int               `json:"total_issues"`
+	TotalTests  int               `json:"total_tests"`
+	Duration    time.Duration     `json:"duration"`
+	Grade       string            `json:"grade,omitempty"`
+	ScanResult  *model.ScanResult `json:"-"`
 }
 
 func gradeFromIssues(issues []model.Issue) string {
@@ -55,11 +55,11 @@ func gradeFromIssues(issues []model.Issue) string {
 }
 
 type DiffResult struct {
-	From      string         `json:"from"`
-	To        string         `json:"to"`
-	Resolved  []model.Issue  `json:"resolved"`
-	New       []model.Issue  `json:"new"`
-	Unchanged []model.Issue  `json:"unchanged"`
+	From      string        `json:"from"`
+	To        string        `json:"to"`
+	Resolved  []model.Issue `json:"resolved"`
+	New       []model.Issue `json:"new"`
+	Unchanged []model.Issue `json:"unchanged"`
 }
 
 func projectID(dir string) string {
@@ -102,7 +102,7 @@ func Save(projectDir string, result *model.ScanResult) error {
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("write: %w", err)
 	}
 	return nil

@@ -134,9 +134,9 @@ func openBrowser(url string) {
 		}
 	}
 	if hasTool("open") {
-		execSilent("open", url)
+		_ = execSilent("open", url)
 	} else if hasTool("xdg-open") {
-		execSilent("xdg-open", url)
+		_ = execSilent("xdg-open", url)
 	}
 }
 

@@ -32,7 +32,7 @@ func SaveConfigFile(cfg *Config, path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
 
 func LoadConfigFile(path string) (*Config, error) {

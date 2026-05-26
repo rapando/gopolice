@@ -57,7 +57,7 @@ func NewServeCommand() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("file watcher: %w", err)
 				}
-				defer w.Stop()
+				defer func() { _ = w.Stop() }()
 				fmt.Fprintf(os.Stderr, "Watching .go files for changes (--watch enabled)\n")
 			}
 
@@ -68,7 +68,7 @@ func NewServeCommand() *cobra.Command {
 				<-sigCh
 				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer shutdownCancel()
-				server.Shutdown(shutdownCtx)
+				_ = server.Shutdown(shutdownCtx)
 			}()
 
 			actualPort, err := server.Start(uiPort)

@@ -94,7 +94,7 @@ func (s *DeadCodeScanner) runStaticcheck(ctx context.Context, projectDir string)
 
 	var issues []model.Issue
 	for _, si := range staticcheckIssues {
-		sev := model.SeverityWarning
+		var sev model.Severity
 		switch si.Severity {
 		case "error":
 			sev = model.SeverityError

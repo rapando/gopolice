@@ -155,7 +155,7 @@ func moduleName(dir string) string {
 	if err != nil {
 		return filepath.Base(dir)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	s := bufio.NewScanner(f)
 	for s.Scan() {
 		line := strings.TrimSpace(s.Text())

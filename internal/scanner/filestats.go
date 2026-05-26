@@ -105,7 +105,7 @@ func countFileLines(path string) model.FileStat {
 	if err != nil {
 		return model.FileStat{Path: path}
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var stat model.FileStat
 	scanner := bufio.NewScanner(file)
@@ -128,7 +128,7 @@ func parseGoMod(path string) []model.Dependency {
 	if err != nil {
 		return nil
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var deps []model.Dependency
 	scanner := bufio.NewScanner(file)

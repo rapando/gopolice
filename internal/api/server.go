@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -27,7 +28,7 @@ import (
 
 type Server struct {
 	store       *Store
-	broadcaster  *SSEBroadcaster
+	broadcaster *SSEBroadcaster
 	config      *config.Config
 	projectDir  string
 	mux         *http.ServeMux
@@ -101,12 +102,13 @@ func (s *Server) registerRoutes() {
 
 func (s *Server) Start(port int) (int, error) {
 	maxAttempts := 100
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		addr := fmt.Sprintf(":%d", port+attempt)
 		listener, err := net.Listen("tcp", addr)
 		if err == nil {
 			s.server = &http.Server{
-				Handler: corsMiddleware(s.mux),
+				Handler:           corsMiddleware(s.mux),
+				ReadHeaderTimeout: 10 * time.Second,
 			}
 			actualPort := port + attempt
 			log.Printf("gopolice UI available at http://localhost:%d", actualPort)
@@ -122,7 +124,7 @@ func (s *Server) Start(port int) (int, error) {
 func isAddrInUse(err error) bool {
 	if opErr, ok := err.(*net.OpError); ok {
 		if sysErr, ok := opErr.Err.(*os.SyscallError); ok {
-			return sysErr.Err == syscall.EADDRINUSE
+			return errors.Is(sysErr.Err, syscall.EADDRINUSE)
 		}
 	}
 	return false
@@ -164,7 +166,7 @@ func jsonResponse(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if data != nil {
-		json.NewEncoder(w).Encode(data)
+		_ = json.NewEncoder(w).Encode(data)
 	}
 }
 
@@ -252,7 +254,7 @@ func (s *Server) runScan(ctx context.Context) {
 			})
 			return
 		case <-ctx.Done():
-			s.broadcaster.Broadcast(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusFailed, Message: "scan cancelled"})
+			s.broadcaster.Broadcast(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusFailed, Message: "scan canceled"})
 			return
 		}
 	}
@@ -279,7 +281,7 @@ func (s *Server) handleScanStatus(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			data, _ := json.Marshal(event)
-			fmt.Fprintf(w, "data: %s\n\n", data)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 			flusher.Flush()
 		case <-r.Context().Done():
 			return
@@ -587,7 +589,7 @@ func (s *Server) handleSnippet(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, "invalid file path")
 		return
 	}
-	data, err := os.ReadFile(fullPath)
+	data, err := os.ReadFile(fullPath) //nolint:gosec // path validated above
 	if err != nil {
 		jsonError(w, http.StatusNotFound, fmt.Sprintf("file not found: %s", file))
 		return
@@ -712,16 +714,16 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		ct := mimeTypeByExtension(path)
 		w.Header().Set("Content-Type", ct)
 		w.WriteHeader(http.StatusOK)
-		w.Write(data)
+		_, _ = w.Write(data) //nolint:gosec // data is from embedded UI assets
 		return
 	}
 
 	diskPath := filepath.Join("ui", "dist", path)
-	if data, err := os.ReadFile(diskPath); err == nil {
+	if data, err := os.ReadFile(diskPath); err == nil { //nolint:gosec // local dev tool, path joined with "ui/dist"
 		ct := mimeTypeByExtension(path)
 		w.Header().Set("Content-Type", ct)
 		w.WriteHeader(http.StatusOK)
-		w.Write(data)
+		_, _ = w.Write(data) //nolint:gosec // embedded UI asset, not user data
 		return
 	}
 
@@ -729,12 +731,12 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	if data, err := os.ReadFile(indexPath); err == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write(data)
+		_, _ = w.Write(data) //nolint:gosec // UI asset from disk
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`
+	_, _ = w.Write([]byte(`
 <!DOCTYPE html><html><body style="font-family:sans-serif;padding:2em;max-width:600px;margin:auto;text-align:center">
 <h1>gopolice UI</h1>
 <p>UI not built yet. Run:</p>

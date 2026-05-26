@@ -88,7 +88,7 @@ func parseAuthors(out string) []model.AuthorInfo {
 		if len(parts) < 2 {
 			continue
 		}
-		fmt.Sscanf(parts[0], "%d", &count)
+		_, _ = fmt.Sscanf(parts[0], "%d", &count)
 		rest := parts[1]
 		if i := strings.LastIndex(rest, "<"); i >= 0 {
 			name = strings.TrimSpace(rest[:i])
@@ -151,18 +151,4 @@ func gitCommand(dir, arg string, args ...string) (string, error) {
 func isGitRepo(dir string) bool {
 	out, err := gitCommand(dir, "rev-parse", "--git-dir")
 	return err == nil && strings.TrimSpace(out) != ""
-}
-
-func countLines(s string) int {
-	if s == "" {
-		return 0
-	}
-	count := 0
-	scanner := bufio.NewScanner(strings.NewReader(s))
-	for scanner.Scan() {
-		if strings.TrimSpace(scanner.Text()) != "" {
-			count++
-		}
-	}
-	return count
 }

@@ -20,13 +20,9 @@ func executeCommand(args ...string) (string, error) {
 	return buf.String(), err
 }
 
-func chdirTemp(t *testing.T) string {
+func chdirTemp(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
-	orig, _ := os.Getwd()
-	os.Chdir(dir)
-	t.Cleanup(func() { os.Chdir(orig) })
-	return dir
+	t.Chdir(t.TempDir())
 }
 
 func TestVersionCommand(t *testing.T) {
@@ -71,8 +67,8 @@ func TestConfigShowCmd(t *testing.T) {
 
 	cfgYAML := `port: 8888
 `
-	os.MkdirAll(filepath.Join(tmpHome, ".config", "gopolice"), 0755)
-	os.WriteFile(filepath.Join(tmpHome, ".config", "gopolice", "config.yaml"), []byte(cfgYAML), 0644)
+	_ = os.MkdirAll(filepath.Join(tmpHome, ".config", "gopolice"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpHome, ".config", "gopolice", "config.yaml"), []byte(cfgYAML), 0600)
 
 	output, err := executeCommand("config", "show")
 	if err != nil {
