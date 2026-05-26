@@ -116,7 +116,7 @@ export default function Layout({ page, onNavigate, scanning, onScan, children, h
       <main className="flex-1 overflow-auto bg-gray-50 dark:bg-ctp-base">{children}</main>
 
       <footer className="shrink-0 px-5 py-1 text-xs text-gray-400 bg-white border-t border-gray-100 flex justify-end items-center gap-1 dark:bg-ctp-mantle dark:border-ctp-surface1 dark:text-ctp-overlay0">
-        {version && <span>v{version}</span>}
+        {version && <span>{version}</span>}
         <span>&copy; Rapando</span>
       </footer>
     </div>
