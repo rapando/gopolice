@@ -88,8 +88,25 @@ func (s *DeadCodeScanner) runStaticcheck(ctx context.Context, projectDir string)
 	}
 
 	var staticcheckIssues []staticcheckIssue
+	// staticcheck v2026+ outputs newline-delimited JSON objects (JSON lines),
+	// older versions output a JSON array. Try JSON array first, then fall back
+	// to line-by-line parsing.
 	if err := json.Unmarshal(output, &staticcheckIssues); err != nil {
-		return nil, fmt.Errorf("parse staticcheck output: %w", err)
+		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			var si staticcheckIssue
+			if err := json.Unmarshal([]byte(line), &si); err != nil {
+				continue
+			}
+			staticcheckIssues = append(staticcheckIssues, si)
+		}
+		if len(staticcheckIssues) == 0 {
+			return nil, fmt.Errorf("parse staticcheck output: %w", err)
+		}
 	}
 
 	var issues []model.Issue

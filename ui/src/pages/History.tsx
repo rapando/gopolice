@@ -5,6 +5,8 @@ interface Props {
   onLoadResult?: (result: ScanResult, label: string) => void
 }
 
+const PAGE_SIZE = 15
+
 export default function History({ onLoadResult }: Props) {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -15,11 +17,16 @@ export default function History({ onLoadResult }: Props) {
   const [diff, setDiff] = useState<DiffResult | null>(null)
   const [showSecurity, setShowSecurity] = useState(false)
   const [showIssues, setShowIssues] = useState(false)
+  const [page, setPage] = useState(1)
+
+  const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE))
+  const paginatedEntries = entries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const loadList = () => {
     setLoading(true)
     getHistoryList().then((list) => {
       setEntries(list)
+      setPage(1)
       setLoading(false)
     }).catch(() => setLoading(false))
   }
@@ -88,31 +95,75 @@ export default function History({ onLoadResult }: Props) {
 
       {entries.length === 0 ? (
         <div className="card p-8 text-center">
-          <p className="text-gray-500 dark:text-ctp-overlay0">No scan history yet. Run <code className="text-xs bg-gray-100 dark:bg-ctp-surface0 px-1 rounded">gopolice scan</code> to create one.</p>
+          <p className="text-gray-500 dark:text-ctp-subtext0">No scan history yet. Run <code className="text-xs bg-gray-100 dark:bg-ctp-surface0 px-1 rounded">gopolice scan</code> to create one.</p>
         </div>
       ) : (
         <>
           <div className="grid grid-cols-4 gap-4 mb-5">
             <div className="card px-5 py-4">
-              <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-0.5">Total Scans</p>
+              <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-0.5">Total Scans</p>
               <p className="text-base font-semibold">{entries.length}</p>
             </div>
             <div className="card px-5 py-4">
-              <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-0.5">Latest Issues</p>
+              <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-0.5">Latest Issues</p>
               <p className="text-base font-semibold">{entries[0]?.total_issues ?? 0}</p>
             </div>
             <div className="card px-5 py-4">
-              <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-0.5">Latest Tests</p>
+              <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-0.5">Latest Tests</p>
               <p className="text-base font-semibold">{entries[0]?.total_tests ?? 0}</p>
             </div>
             <div className="card px-5 py-4">
-              <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-0.5">Project</p>
+              <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-0.5">Project</p>
               <p className="text-base font-semibold truncate">{entries[0]?.project_name ?? '-'}</p>
             </div>
           </div>
 
+          {/* Pagination */}
+          <div className="flex items-center justify-between mb-3 text-xs text-gray-500 dark:text-ctp-subtext0">
+            <span>{entries.length} scan{entries.length !== 1 ? 's' : ''}</span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(1)}
+                disabled={page === 1}
+                className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-ctp-surface0 disabled:opacity-30 disabled:cursor-default transition-colors"
+                title="First page"
+              >&#171;</button>
+              <button
+                onClick={() => setPage(page - 1)}
+                disabled={page === 1}
+                className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-ctp-surface0 disabled:opacity-30 disabled:cursor-default transition-colors"
+              >&#8249;</button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                .map((p, idx, arr) => (
+                  <span key={p} className="flex items-center">
+                    {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-gray-300 dark:text-ctp-surface1">&hellip;</span>}
+                    <button
+                      onClick={() => setPage(p)}
+                      className={`px-2 py-1 rounded transition-colors ${
+                        p === page
+                          ? 'bg-blue-100 text-blue-700 dark:bg-ctp-surface1 dark:text-ctp-lavender font-semibold'
+                          : 'hover:bg-gray-100 dark:hover:bg-ctp-surface0'
+                      }`}
+                    >{p}</button>
+                  </span>
+                ))}
+              <button
+                onClick={() => setPage(page + 1)}
+                disabled={page === totalPages}
+                className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-ctp-surface0 disabled:opacity-30 disabled:cursor-default transition-colors"
+              >&#8250;</button>
+              <button
+                onClick={() => setPage(totalPages)}
+                disabled={page === totalPages}
+                className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-ctp-surface0 disabled:opacity-30 disabled:cursor-default transition-colors"
+                title="Last page"
+              >&#187;</button>
+            </div>
+          </div>
+
           <div className="card mb-5 overflow-hidden">
-            <div className="flex items-center gap-3 px-5 py-2.5 bg-gray-50 border-b border-gray-100 text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium dark:bg-ctp-surface0 dark:border-ctp-surface1">
+            <div className="flex items-center gap-3 px-5 py-2.5 bg-gray-50 border-b border-gray-100 text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium dark:bg-ctp-surface0 dark:border-ctp-surface1">
               <span className="w-4 shrink-0" />
               <span className="w-9 shrink-0" />
               <span className="w-36 shrink-0">Date</span>
@@ -123,7 +174,7 @@ export default function History({ onLoadResult }: Props) {
               <span className="w-6 shrink-0" />
             </div>
             <div className="divide-y divide-gray-100 dark:divide-ctp-surface0">
-              {entries.map((e) => {
+              {paginatedEntries.map((e) => {
                 const isSelected = selected === e.id
                 const isDiffFrom = diffFrom === e.id
                 const isDiffTo = diffTo === e.id
@@ -150,19 +201,19 @@ export default function History({ onLoadResult }: Props) {
                         e.grade === 'F' ? 'text-red-600 dark:text-ctp-red' : ''
                       }`}>{e.grade || '-'}</span>
                       <button className="flex-1 flex items-center gap-3 text-left" onClick={() => viewEntry(e.id)}>
-                        <span className="text-xs text-gray-400 dark:text-ctp-overlay0 font-mono w-36 shrink-0">
+                        <span className="text-xs text-gray-400 dark:text-ctp-subtext0 font-mono w-36 shrink-0">
                           {new Date(e.timestamp).toLocaleString()}
                         </span>
                         <span className="text-sm text-gray-800 dark:text-ctp-text font-medium w-16 shrink-0">{e.total_issues}</span>
-                        <span className="text-xs text-gray-500 dark:text-ctp-overlay0 w-16 shrink-0">{e.total_tests}</span>
+                        <span className="text-xs text-gray-500 dark:text-ctp-subtext0 w-16 shrink-0">{e.total_tests}</span>
                         <span className="flex-1" />
-                        <span className="text-xs text-gray-400 dark:text-ctp-overlay0 font-mono w-16 shrink-0 text-right">
+                        <span className="text-xs text-gray-400 dark:text-ctp-subtext0 font-mono w-16 shrink-0 text-right">
                           {durationStr(e.duration)}
                         </span>
                       </button>
                       <button
                         onClick={(ev) => { ev.stopPropagation(); deleteEntry(e.id) }}
-                        className="text-xs text-gray-400 hover:text-red-500 dark:text-ctp-overlay0 dark:hover:text-ctp-red shrink-0 w-6 text-right"
+                        className="text-xs text-gray-400 hover:text-red-500 dark:text-ctp-subtext0 dark:hover:text-ctp-red shrink-0 w-6 text-right"
                         title="Delete"
                       >
                         ✕
@@ -174,12 +225,42 @@ export default function History({ onLoadResult }: Props) {
             </div>
           </div>
 
+          {/* Bottom pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mb-5 text-xs text-gray-500 dark:text-ctp-subtext0">
+              <span>{entries.length} scan{entries.length !== 1 ? 's' : ''}</span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(1)}
+                  disabled={page === 1}
+                  className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-ctp-surface0 disabled:opacity-30 disabled:cursor-default transition-colors"
+                >&#171;</button>
+                <button
+                  onClick={() => setPage(page - 1)}
+                  disabled={page === 1}
+                  className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-ctp-surface0 disabled:opacity-30 disabled:cursor-default transition-colors"
+                >&#8249;</button>
+                <span className="px-2">Page {page} of {totalPages}</span>
+                <button
+                  onClick={() => setPage(page + 1)}
+                  disabled={page === totalPages}
+                  className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-ctp-surface0 disabled:opacity-30 disabled:cursor-default transition-colors"
+                >&#8250;</button>
+                <button
+                  onClick={() => setPage(totalPages)}
+                  disabled={page === totalPages}
+                  className="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-ctp-surface0 disabled:opacity-30 disabled:cursor-default transition-colors"
+                >&#187;</button>
+              </div>
+            </div>
+          )}
+
           {diffFrom && diffTo && !diff && (
             <div className="mb-5">
               <button onClick={runDiff} className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors">
                 Compare selected scans
               </button>
-              <span className="ml-2 text-xs text-gray-400 dark:text-ctp-overlay0">
+              <span className="ml-2 text-xs text-gray-400 dark:text-ctp-subtext0">
                 {tsDisplay(diffFrom)} vs {tsDisplay(diffTo)}
               </span>
             </div>
@@ -188,10 +269,10 @@ export default function History({ onLoadResult }: Props) {
           {diff && (
             <div className="card mb-5">
               <div className="px-5 py-3 border-b border-gray-100 dark:border-ctp-surface0 flex items-center justify-between">
-                <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium">
+                <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium">
                   Diff: {tsDisplay(diff.from)} → {tsDisplay(diff.to)}
                 </p>
-                <button onClick={() => { setDiff(null); setDiffFrom(null); setDiffTo(null) }} className="text-xs text-gray-400 hover:text-gray-600 dark:text-ctp-overlay0 dark:hover:text-ctp-text">
+                <button onClick={() => { setDiff(null); setDiffFrom(null); setDiffTo(null) }} className="text-xs text-gray-400 hover:text-gray-600 dark:text-ctp-subtext0 dark:hover:text-ctp-text">
                   Clear
                 </button>
               </div>
@@ -211,7 +292,7 @@ export default function History({ onLoadResult }: Props) {
                   <div className="px-5 py-3">
                     <p className="text-xs font-medium text-green-600 dark:text-ctp-green mb-2">Resolved Issues ({diff.resolved.length})</p>
                     {diff.resolved.map((issue) => (
-                      <p key={issue.id} className="text-xs text-gray-500 dark:text-ctp-overlay0 font-mono line-through mb-1">
+                      <p key={issue.id} className="text-xs text-gray-500 dark:text-ctp-subtext0 font-mono line-through mb-1">
                         <span className={`inline-block w-14 text-center rounded text-[10px] font-medium ${severityBadge(issue.severity)}`}>{issue.severity}</span>
                         {' '}{issue.file}:{issue.line} — {issue.message}
                       </p>
@@ -220,11 +301,11 @@ export default function History({ onLoadResult }: Props) {
                 )}
                 {diff.unchanged.length > 0 && (
                   <div className="px-5 py-3">
-                    <p className="text-xs font-medium text-gray-500 dark:text-ctp-overlay0 mb-2">Unchanged ({diff.unchanged.length})</p>
+                    <p className="text-xs font-medium text-gray-500 dark:text-ctp-subtext0 mb-2">Unchanged ({diff.unchanged.length})</p>
                   </div>
                 )}
                 {diff.new.length === 0 && diff.resolved.length === 0 && (
-                  <div className="px-5 py-4 text-center text-xs text-gray-400 dark:text-ctp-overlay0">No changes — same issues in both scans.</div>
+                  <div className="px-5 py-4 text-center text-xs text-gray-400 dark:text-ctp-subtext0">No changes — same issues in both scans.</div>
                 )}
               </div>
             </div>
@@ -234,7 +315,7 @@ export default function History({ onLoadResult }: Props) {
             <div className="space-y-5">
               <div className="card">
                 <div className="px-5 py-3 border-b border-gray-100 dark:border-ctp-surface0 flex items-center justify-between">
-                  <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium">
+                  <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium">
                     Scan Results — {tsDisplay(selected)}
                   </p>
                   {onLoadResult && (
@@ -249,19 +330,19 @@ export default function History({ onLoadResult }: Props) {
                 <div className="px-5 py-4 space-y-4">
                   <div className="grid grid-cols-4 gap-4">
                     <div>
-                      <p className="text-xs text-gray-400 dark:text-ctp-overlay0">Issues</p>
+                      <p className="text-xs text-gray-400 dark:text-ctp-subtext0">Issues</p>
                       <p className="text-base font-semibold text-gray-800 dark:text-ctp-text">{entry.issues.length}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400 dark:text-ctp-overlay0">Files</p>
+                      <p className="text-xs text-gray-400 dark:text-ctp-subtext0">Files</p>
                       <p className="text-base font-semibold text-gray-800 dark:text-ctp-text">{entry.total_files}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400 dark:text-ctp-overlay0">Duration</p>
+                      <p className="text-xs text-gray-400 dark:text-ctp-subtext0">Duration</p>
                       <p className="text-base font-semibold text-gray-800 dark:text-ctp-text">{durationStr(entry.duration)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400 dark:text-ctp-overlay0">Git</p>
+                      <p className="text-xs text-gray-400 dark:text-ctp-subtext0">Git</p>
                       <p className="text-base font-semibold text-gray-800 dark:text-ctp-text truncate font-mono text-sm">
                         {entry.git_info ? `${entry.git_info.branch} @ ${entry.git_info.commit.slice(0, 7)}` : '-'}
                       </p>
@@ -275,7 +356,7 @@ export default function History({ onLoadResult }: Props) {
                   onClick={() => setShowIssues(!showIssues)}
                   className="w-full px-5 py-3 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-ctp-surface0 transition-colors"
                 >
-                  <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium">
+                  <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium">
                     Issues ({entry.issues.length})
                   </p>
                   <svg className={`w-3 h-3 text-gray-400 transition-transform ${showIssues ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -285,17 +366,17 @@ export default function History({ onLoadResult }: Props) {
                 {showIssues && (
                   <div className="divide-y divide-gray-100 dark:divide-ctp-surface0 max-h-80 overflow-y-auto">
                     {entry.issues.length === 0 ? (
-                      <div className="px-5 py-4 text-center text-xs text-gray-400 dark:text-ctp-overlay0">No issues.</div>
+                      <div className="px-5 py-4 text-center text-xs text-gray-400 dark:text-ctp-subtext0">No issues.</div>
                     ) : (
                       entry.issues.map((issue) => (
                         <div key={issue.id} className="px-5 py-2.5 text-xs">
                           <div className="flex items-center gap-2 mb-0.5">
                             <span className={`inline-block w-14 text-center rounded text-[10px] font-medium ${severityBadge(issue.severity)}`}>{issue.severity}</span>
                             <span className={"font-medium " + categoryColor(issue.category)}>{issue.category}</span>
-                            <span className="text-gray-400 dark:text-ctp-overlay0 font-mono">{issue.scanner}</span>
+                            <span className="text-gray-400 dark:text-ctp-subtext0 font-mono">{issue.scanner}</span>
                           </div>
                           <p className="text-gray-700 dark:text-ctp-subtext0">{issue.message}</p>
-                          <p className="text-gray-400 dark:text-ctp-overlay0 font-mono">{issue.file}:{issue.line}</p>
+                          <p className="text-gray-400 dark:text-ctp-subtext0 font-mono">{issue.file}:{issue.line}</p>
                         </div>
                       ))
                     )}
@@ -308,7 +389,7 @@ export default function History({ onLoadResult }: Props) {
                   onClick={() => setShowSecurity(!showSecurity)}
                   className="w-full px-5 py-3 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-ctp-surface0 transition-colors"
                 >
-                  <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium">
+                  <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium">
                     Security Issues ({entry.issues.filter(i => i.category === 'security').length})
                   </p>
                   <svg className={`w-3 h-3 text-gray-400 transition-transform ${showSecurity ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -320,16 +401,16 @@ export default function History({ onLoadResult }: Props) {
                     {(() => {
                       const sec = entry.issues.filter(i => i.category === 'security')
                       return sec.length === 0 ? (
-                        <div className="px-5 py-4 text-center text-xs text-gray-400 dark:text-ctp-overlay0">No security issues.</div>
+                        <div className="px-5 py-4 text-center text-xs text-gray-400 dark:text-ctp-subtext0">No security issues.</div>
                       ) : (
                         sec.map((issue) => (
                           <div key={issue.id} className="px-5 py-2.5 text-xs">
                             <div className="flex items-center gap-2 mb-0.5">
                               <span className={`inline-block w-14 text-center rounded text-[10px] font-medium ${severityBadge(issue.severity)}`}>{issue.severity}</span>
-                              <span className="text-gray-400 dark:text-ctp-overlay0 font-mono">{issue.scanner}/{issue.rule}</span>
+                              <span className="text-gray-400 dark:text-ctp-subtext0 font-mono">{issue.scanner}/{issue.rule}</span>
                             </div>
                             <p className="text-gray-700 dark:text-ctp-subtext0">{issue.message}</p>
-                            <p className="text-gray-400 dark:text-ctp-overlay0 font-mono">{issue.file}:{issue.line}</p>
+                            <p className="text-gray-400 dark:text-ctp-subtext0 font-mono">{issue.file}:{issue.line}</p>
                           </div>
                         ))
                       )
@@ -341,7 +422,7 @@ export default function History({ onLoadResult }: Props) {
               {entry.test_results && (
                 <div className="card">
                   <div className="px-5 py-3 border-b border-gray-100 dark:border-ctp-surface0">
-                    <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium">Test Results</p>
+                    <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium">Test Results</p>
                   </div>
                   <div className="px-5 py-4">
                     <div className="flex gap-4 text-sm mb-3">
@@ -358,8 +439,8 @@ export default function History({ onLoadResult }: Props) {
                             pkg.status === 'fail' ? 'bg-red-100 text-red-700 dark:bg-ctp-surface0 dark:text-ctp-red' :
                             'bg-yellow-100 text-yellow-700 dark:bg-ctp-surface0 dark:text-ctp-yellow'
                           }`}>{pkg.status}</span>
-                          <span className="text-gray-600 dark:text-ctp-overlay0 font-mono truncate">{pkg.name}</span>
-                          <span className="text-gray-400 dark:text-ctp-overlay0 ml-auto">{pkg.tests.length} tests · {durationStr(pkg.duration)}</span>
+                          <span className="text-gray-600 dark:text-ctp-subtext0 font-mono truncate">{pkg.name}</span>
+                          <span className="text-gray-400 dark:text-ctp-subtext0 ml-auto">{pkg.tests.length} tests · {durationStr(pkg.duration)}</span>
                         </div>
                       ))}
                     </div>
@@ -370,23 +451,23 @@ export default function History({ onLoadResult }: Props) {
               {entry.git_info && (
                 <div className="card">
                   <div className="px-5 py-3 border-b border-gray-100 dark:border-ctp-surface0">
-                    <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium">Git</p>
+                    <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium">Git</p>
                   </div>
                   <div className="px-5 py-4 grid grid-cols-2 gap-4 text-xs">
                     <div>
-                      <p className="text-gray-400 dark:text-ctp-overlay0">Branch</p>
+                      <p className="text-gray-400 dark:text-ctp-subtext0">Branch</p>
                       <p className="font-mono text-gray-700 dark:text-ctp-subtext0">{entry.git_info.branch}</p>
                     </div>
                     <div>
-                      <p className="text-gray-400 dark:text-ctp-overlay0">Commit</p>
+                      <p className="text-gray-400 dark:text-ctp-subtext0">Commit</p>
                       <p className="font-mono text-gray-700 dark:text-ctp-subtext0">{entry.git_info.commit.slice(0, 7)}</p>
                     </div>
                     <div>
-                      <p className="text-gray-400 dark:text-ctp-overlay0">Author Count</p>
+                      <p className="text-gray-400 dark:text-ctp-subtext0">Author Count</p>
                       <p className="text-gray-700 dark:text-ctp-subtext0">{entry.git_info.author_count}</p>
                     </div>
                     <div>
-                      <p className="text-gray-400 dark:text-ctp-overlay0">Last Commit</p>
+                      <p className="text-gray-400 dark:text-ctp-subtext0">Last Commit</p>
                       <p className="text-gray-700 dark:text-ctp-subtext0">{new Date(entry.git_info.commit_time).toLocaleString()}</p>
                     </div>
                   </div>

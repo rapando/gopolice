@@ -25,7 +25,7 @@ export default function ConfigPage() {
       <div className="max-w-4xl mx-auto p-8">
         <h2 className="text-lg font-bold text-gray-800 mb-5 dark:text-ctp-text">Config</h2>
         <div className="card p-8 text-center">
-          <p className="text-gray-500 dark:text-ctp-overlay0">Loading...</p>
+          <p className="text-gray-500 dark:text-ctp-subtext0">Loading...</p>
         </div>
       </div>
     )
@@ -62,7 +62,7 @@ function Field({ label, desc, value, onChange, type }: {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 dark:text-ctp-subtext0 mb-1">{label}</label>
-      {desc && <p className="text-xs text-gray-400 dark:text-ctp-overlay1 mb-1.5">{desc}</p>}
+      {desc && <p className="text-xs text-gray-400 dark:text-ctp-subtext1 mb-1.5">{desc}</p>}
       <input
         type={type || 'text'}
         value={value ?? ''}

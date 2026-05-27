@@ -20,7 +20,7 @@ export default function Tests({ testResult, onScan, scanning, onSelectTest }: Pr
 
       {!testResult ? (
         <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded p-10 text-center">
-          <p className="text-gray-500 dark:text-ctp-overlay0 mb-4">No test results available.</p>
+          <p className="text-gray-500 dark:text-ctp-subtext0 mb-4">No test results available.</p>
           {onScan && (
             <button
               onClick={onScan}
@@ -44,21 +44,21 @@ export default function Tests({ testResult, onScan, scanning, onSelectTest }: Pr
             <>
               <div className="grid grid-cols-4 gap-4 mb-6">
                 <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded px-5 py-4">
-                  <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-0.5">Total</p>
+                  <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-0.5">Total</p>
                   <p className="text-2xl font-bold">{testResult.total.total}</p>
                 </div>
                 <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded px-5 py-4 border-l-4 border-l-green-500">
-                  <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-0.5">Passed</p>
+                  <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-0.5">Passed</p>
                   <p className="text-2xl font-bold text-green-600 dark:text-ctp-green">{testResult.total.passed}</p>
                 </div>
                 <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded px-5 py-4 border-l-4 border-l-red-500">
-                  <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-0.5">Failed</p>
+                  <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-0.5">Failed</p>
                   <p className={`text-2xl font-bold ${testResult.total.failed > 0 ? 'text-red-600 dark:text-ctp-red' : ''}`}>
                     {testResult.total.failed}
                   </p>
                 </div>
                 <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded px-5 py-4 border-l-4 border-l-blue-500">
-                  <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-0.5">Pass Rate</p>
+                  <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-0.5">Pass Rate</p>
                   <p className="text-2xl font-bold">
                     {testResult.total.total > 0
                       ? ((testResult.total.passed / testResult.total.total) * 100).toFixed(1)
@@ -69,7 +69,7 @@ export default function Tests({ testResult, onScan, scanning, onSelectTest }: Pr
 
               {!testResult.packages || testResult.packages.length === 0 ? (
                 <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded p-8 text-center">
-                  <p className="text-gray-500 dark:text-ctp-overlay0">No test packages found.</p>
+                  <p className="text-gray-500 dark:text-ctp-subtext0">No test packages found.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -83,7 +83,7 @@ export default function Tests({ testResult, onScan, scanning, onSelectTest }: Pr
                               <div className="w-20 h-2 bg-gray-200 dark:bg-ctp-surface1 rounded-full overflow-hidden">
                                 <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.min(pkg.coverage, 100)}%` }} />
                               </div>
-                              <span className="text-xs font-mono text-gray-500 dark:text-ctp-overlay0 tabular-nums">{pkg.coverage.toFixed(1)}%</span>
+                              <span className="text-xs font-mono text-gray-500 dark:text-ctp-subtext0 tabular-nums">{pkg.coverage.toFixed(1)}%</span>
                             </div>
                           )}
                           <span className={`text-xs font-medium ${pkg.status === 'ok' ? 'text-green-600 dark:text-ctp-green' : 'text-red-600 dark:text-ctp-red'}`}>
@@ -107,7 +107,7 @@ export default function Tests({ testResult, onScan, scanning, onSelectTest }: Pr
                                   : 'text-yellow-600 dark:text-ctp-yellow'
                               }`}>{t.status}</span>
                               <span className="text-gray-700 dark:text-ctp-subtext0">{t.name}</span>
-                              {t.duration > 0 && <span className="text-xs text-gray-400 dark:text-ctp-overlay1 ml-auto font-mono tabular-nums">{(t.duration / 1e9).toFixed(3)}s</span>}
+                              {t.duration > 0 && <span className="text-xs text-gray-400 dark:text-ctp-subtext1 ml-auto font-mono tabular-nums">{(t.duration / 1e9).toFixed(3)}s</span>}
                             </div>
                           ))}
                         </div>

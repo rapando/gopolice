@@ -122,7 +122,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
   return (
     <div className="max-w-6xl mx-auto p-8">
       <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text mb-5">
-        Issues <span className="font-normal text-gray-400 dark:text-ctp-overlay1">({issues.length})</span>
+        Issues <span className="font-normal text-gray-400 dark:text-ctp-subtext1">({issues.length})</span>
       </h2>
 
       <div className="flex flex-wrap items-center gap-3 mb-5">
@@ -141,7 +141,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
               className={`px-3 py-1.5 text-xs font-medium rounded border transition-colors ${
                 selectedSeverity === s
                   ? `${sevBadge[s]} border-current`
-                  : 'border-gray-300 text-gray-500 hover:bg-gray-100 dark:border-ctp-surface1 dark:text-ctp-overlay0 dark:hover:bg-ctp-surface0'
+                  : 'border-gray-300 text-gray-500 hover:bg-gray-100 dark:border-ctp-surface1 dark:text-ctp-subtext0 dark:hover:bg-ctp-surface0'
               }`}
             >
               <span className={sevColor[s]}>{sevIcon[s]}</span>
@@ -150,7 +150,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
           ))}
         </div>
         <div className="flex items-center gap-1 ml-auto">
-          <span className="text-xs text-gray-400 dark:text-ctp-overlay1 mr-1">Group:</span>
+          <span className="text-xs text-gray-400 dark:text-ctp-subtext1 mr-1">Group:</span>
           {(['', 'rule', 'file', 'category', 'module'] as GroupBy[]).map((g) => (
             <button
               key={g}
@@ -158,7 +158,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
               className={`px-2 py-1 text-xs rounded transition-colors ${
                 groupBy === g
                   ? 'bg-blue-100 text-blue-700 dark:bg-ctp-surface1 dark:text-ctp-lavender'
-                  : 'text-gray-500 hover:text-gray-700 dark:text-ctp-overlay0 dark:hover:text-ctp-text'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-ctp-subtext0 dark:hover:text-ctp-text'
               }`}
             >
               {g || 'None'}
@@ -179,7 +179,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSelected(new Set())}
-              className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-ctp-overlay0 hover:text-gray-800 dark:hover:text-ctp-text transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-ctp-subtext0 hover:text-gray-800 dark:hover:text-ctp-text transition-colors"
             >
               Clear
             </button>
@@ -206,7 +206,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
 
       {filtered.length === 0 ? (
         <div className="card p-10 text-center">
-          <p className="text-gray-500 dark:text-ctp-overlay0">No issues match the filters.</p>
+          <p className="text-gray-500 dark:text-ctp-subtext0">No issues match the filters.</p>
         </div>
       ) : (
         <>
@@ -222,10 +222,10 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
                       className="rounded border-gray-300 dark:border-ctp-surface1"
                     />
                   </th>
-                  <th className="text-left px-3 py-2.5 font-medium text-gray-500 dark:text-ctp-overlay0 text-xs uppercase tracking-wide">Severity</th>
-                  <th className="text-left px-3 py-2.5 font-medium text-gray-500 dark:text-ctp-overlay0 text-xs uppercase tracking-wide">Message</th>
-                  <th className="text-left px-3 py-2.5 font-medium text-gray-500 dark:text-ctp-overlay0 text-xs uppercase tracking-wide">File</th>
-                  <th className="text-right px-3 py-2.5 font-medium text-gray-500 dark:text-ctp-overlay0 text-xs uppercase tracking-wide">Line</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-gray-500 dark:text-ctp-subtext0 text-xs uppercase tracking-wide">Severity</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-gray-500 dark:text-ctp-subtext0 text-xs uppercase tracking-wide">Message</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-gray-500 dark:text-ctp-subtext0 text-xs uppercase tracking-wide">File</th>
+                  <th className="text-right px-3 py-2.5 font-medium text-gray-500 dark:text-ctp-subtext0 text-xs uppercase tracking-wide">Line</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-ctp-surface1">
@@ -260,7 +260,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
                 <span className="text-xs font-medium text-gray-600 dark:text-ctp-subtext0 font-mono">{snippet.file}</span>
                 <button
                   onClick={() => setSnippet(null)}
-                  className="text-xs text-gray-400 dark:text-ctp-overlay1 hover:text-gray-600 dark:hover:text-ctp-subtext0"
+                  className="text-xs text-gray-400 dark:text-ctp-subtext1 hover:text-gray-600 dark:hover:text-ctp-subtext0"
                 >
                   Close
                 </button>
@@ -271,7 +271,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
                     key={l.number}
                     className={`flex ${l.is_issue ? 'bg-red-50 dark:bg-red-950/30 border-l-2 border-red-500' : ''}`}
                   >
-                    <span className="text-gray-400 dark:text-ctp-overlay1 text-right w-12 shrink-0 select-none py-0.5 pr-3 border-r border-gray-200 dark:border-ctp-surface1 mr-3">
+                    <span className="text-gray-400 dark:text-ctp-subtext1 text-right w-12 shrink-0 select-none py-0.5 pr-3 border-r border-gray-200 dark:border-ctp-surface1 mr-3">
                       {l.number}
                     </span>
                     <span className={`py-0.5 ${l.is_issue ? 'text-red-800 dark:text-ctp-red font-medium' : 'text-gray-700 dark:text-ctp-subtext0'}`}>
@@ -331,7 +331,7 @@ function IssueRow({ issue, selected, onToggleSelect, onSelectIssue, onFileClick 
           <span className={`px-2 py-0.5 rounded text-xs font-medium ${sevBadge[issue.severity]}`}>
             {issue.severity}
           </span>
-          <span className="text-xs text-gray-400 dark:text-ctp-overlay1 font-mono">{issue.scanner}</span>
+          <span className="text-xs text-gray-400 dark:text-ctp-subtext1 font-mono">{issue.scanner}</span>
           {issue.module && <span className="text-xs px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 dark:bg-ctp-mauve/20 dark:text-ctp-mauve font-mono">{issue.module}</span>}
         </div>
       </td>
@@ -348,7 +348,7 @@ function IssueRow({ issue, selected, onToggleSelect, onSelectIssue, onFileClick 
           {issue.file}
         </button>
       </td>
-      <td className="px-3 py-3 text-gray-400 dark:text-ctp-overlay1 font-mono text-xs text-right">
+      <td className="px-3 py-3 text-gray-400 dark:text-ctp-subtext1 font-mono text-xs text-right">
         <button onClick={onSelectIssue} className="hover:text-blue-600 dark:hover:text-ctp-blue">{issue.line}</button>
       </td>
     </tr>
@@ -380,9 +380,9 @@ function GroupedRows({ groups, selected, onToggleSelect, onToggleGroup, onSelect
                   className="rounded border-gray-300 dark:border-ctp-surface1"
                 />
               </td>
-              <td colSpan={4} className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide">
+              <td colSpan={4} className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide">
                 {key}
-                <span className="font-normal text-gray-400 dark:text-ctp-overlay1 ml-2">({groupIssues.length})</span>
+                <span className="font-normal text-gray-400 dark:text-ctp-subtext1 ml-2">({groupIssues.length})</span>
               </td>
             </tr>
             {groupIssues.map((issue) => (

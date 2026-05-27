@@ -297,7 +297,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
 
       {!depGraph || !depGraph.edges || depGraph.edges.length === 0 ? (
         <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded p-10 text-center">
-          <p className="text-gray-500 dark:text-ctp-overlay0 mb-4">No dependency graph available.</p>
+          <p className="text-gray-500 dark:text-ctp-subtext0 mb-4">No dependency graph available.</p>
           {onScan && (
             <button
               onClick={onScan}
@@ -323,7 +323,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
               <div className="px-4 py-2.5 border-b border-gray-200 dark:border-ctp-surface1 flex items-center gap-3 flex-wrap">
                 <div className="relative flex-1 min-w-[180px] max-w-sm">
                   <svg
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 dark:text-ctp-overlay1 pointer-events-none"
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 dark:text-ctp-subtext1 pointer-events-none"
                     fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
@@ -346,7 +346,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
                     </button>
                   )}
                 </div>
-                <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-ctp-overlay0 shrink-0">
+                <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-ctp-subtext0 shrink-0">
                   <span className="flex items-center gap-1">
                     <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400" /> Root
                   </span>
@@ -354,12 +354,12 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
                     <span className="inline-block w-2.5 h-2.5 rounded-full bg-indigo-400" /> Dep
                   </span>
                   {!searchQuery && (
-                    <span className="text-gray-400 dark:text-ctp-overlay1 ml-1">
+                    <span className="text-gray-400 dark:text-ctp-subtext1 ml-1">
                       {edges.length} edges &middot; {allNodes.length} nodes
                     </span>
                   )}
                   {searchQuery && (
-                    <span className="text-gray-400 dark:text-ctp-overlay1 ml-1">
+                    <span className="text-gray-400 dark:text-ctp-subtext1 ml-1">
                       filtered
                     </span>
                   )}
@@ -394,19 +394,19 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
               </div>
 
               <div className="px-4 py-3 border-b border-gray-100 dark:border-ctp-surface1">
-                <p className="text-xs font-mono text-gray-500 dark:text-ctp-overlay1 break-all leading-relaxed">{selectedInfo.id}</p>
+                <p className="text-xs font-mono text-gray-500 dark:text-ctp-subtext1 break-all leading-relaxed">{selectedInfo.id}</p>
               </div>
 
               {/* Dependencies (outgoing) */}
               <div className="px-4 py-3 border-b border-gray-100 dark:border-ctp-surface1">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-ctp-overlay1 mb-2 flex items-center gap-1.5">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-ctp-subtext1 mb-2 flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                   Dependencies ({selectedInfo.deps.length})
                 </h4>
                 {selectedInfo.deps.length === 0 ? (
-                  <p className="text-xs text-gray-400 dark:text-ctp-overlay0 italic">None</p>
+                  <p className="text-xs text-gray-400 dark:text-ctp-subtext0 italic">None</p>
                 ) : (
                   <ul className="space-y-0.5 max-h-40 overflow-y-auto">
                     {selectedInfo.deps.map((dep) => (
@@ -417,7 +417,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
                         >
                           <span className="text-green-500 mr-1.5">→</span>
                           {extractShortName(dep)}
-                          <span className="text-gray-400 dark:text-ctp-overlay1 ml-1.5 text-[10px]">{dep}</span>
+                          <span className="text-gray-400 dark:text-ctp-subtext1 ml-1.5 text-[10px]">{dep}</span>
                         </button>
                       </li>
                     ))}
@@ -427,14 +427,14 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
 
               {/* Dependents (incoming) */}
               <div className="px-4 py-3">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-ctp-overlay1 mb-2 flex items-center gap-1.5">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-ctp-subtext1 mb-2 flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
                   </svg>
                   Used by ({selectedInfo.dependents.length})
                 </h4>
                 {selectedInfo.dependents.length === 0 ? (
-                  <p className="text-xs text-gray-400 dark:text-ctp-overlay0 italic">None (root module)</p>
+                  <p className="text-xs text-gray-400 dark:text-ctp-subtext0 italic">None (root module)</p>
                 ) : (
                   <ul className="space-y-0.5 max-h-40 overflow-y-auto">
                     {selectedInfo.dependents.map((dep) => (
@@ -445,7 +445,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
                         >
                           <span className="text-blue-500 mr-1.5">←</span>
                           {extractShortName(dep)}
-                          <span className="text-gray-400 dark:text-ctp-overlay1 ml-1.5 text-[10px]">{dep}</span>
+                          <span className="text-gray-400 dark:text-ctp-subtext1 ml-1.5 text-[10px]">{dep}</span>
                         </button>
                       </li>
                     ))}

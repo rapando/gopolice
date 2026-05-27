@@ -113,7 +113,7 @@ function ProfileTable({ title, entries, maxFlat }: { title: string; entries: Pro
       <div className="overflow-x-auto bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-200 dark:border-ctp-surface1 text-left text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide">
+            <tr className="border-b border-gray-200 dark:border-ctp-surface1 text-left text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide">
               <th className="py-3 px-4 font-medium">Function</th>
               <th className="py-3 px-4 font-medium text-right">Flat</th>
               <th className="py-3 px-4 font-medium text-right">Flat%</th>
@@ -375,7 +375,7 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
         Benchmark Overview
-        <span className="text-xs font-normal text-gray-400 dark:text-ctp-overlay1 ml-1">({benchmarks.length} benchmarks)</span>
+        <span className="text-xs font-normal text-gray-400 dark:text-ctp-subtext1 ml-1">({benchmarks.length} benchmarks)</span>
       </h3>
       <div className="relative bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg overflow-hidden">
         <svg ref={svgRef} className="w-full" style={{ height: '52vh', minHeight: 500 }} />
@@ -399,7 +399,7 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
       <div className="mt-3 overflow-x-auto bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-gray-100 dark:border-ctp-surface1 text-left text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide">
+            <tr className="border-b border-gray-100 dark:border-ctp-surface1 text-left text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide">
               <th className="py-2 px-3 font-medium">Benchmark</th>
               <th className="py-2 px-3 font-medium text-right">Time/Op</th>
               <th className="py-2 px-3 font-medium text-right">Allocs</th>
@@ -428,8 +428,8 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
                   <td className="py-1.5 px-3 text-right font-mono text-gray-700 dark:text-ctp-subtext1">{fmtDuration(b.time_per_op)}</td>
                   <td className="py-1.5 px-3 text-right font-mono text-gray-700 dark:text-ctp-subtext1">{b.allocs_per_op}</td>
                   <td className="py-1.5 px-3 text-right font-mono text-gray-700 dark:text-ctp-subtext1">{fmtBytes(b.bytes_per_op)}</td>
-                  <td className="py-1.5 px-3 text-right text-gray-500 dark:text-ctp-overlay0">{b.iterations.toLocaleString()}</td>
-                  <td className="py-1.5 px-3 text-right font-mono text-gray-500 dark:text-ctp-overlay0">
+                  <td className="py-1.5 px-3 text-right text-gray-500 dark:text-ctp-subtext0">{b.iterations.toLocaleString()}</td>
+                  <td className="py-1.5 px-3 text-right font-mono text-gray-500 dark:text-ctp-subtext0">
                     {cpuMatch ? `${cpuMatch[1]} thread${cpuMatch[1] !== '1' ? 's' : ''}` : '—'}
                   </td>
                 </tr>
@@ -475,7 +475,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning }: P
       <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1400px)' }}>
         <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text mb-5">Performance</h2>
         <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded p-10 text-center">
-          <p className="text-gray-500 dark:text-ctp-overlay0 mb-4">No performance data available.</p>
+          <p className="text-gray-500 dark:text-ctp-subtext0 mb-4">No performance data available.</p>
           {onScan && (
             <button onClick={onScan} disabled={scanning}
               className="px-4 py-2 text-sm font-medium bg-green-600 text-white dark:bg-ctp-green dark:text-ctp-base rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
@@ -496,19 +496,19 @@ export default function Performance({ benchmarks, profile, onScan, scanning }: P
       {hasBenchmarks && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
-            <div className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide mb-0.5">Benchmarks</div>
+            <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Benchmarks</div>
             <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{benchmarks!.length}</div>
           </div>
           <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
-            <div className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide mb-0.5">Avg Time/Op</div>
+            <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Avg Time/Op</div>
             <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{fmtShortNS(avgTime)}</div>
           </div>
           <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
-            <div className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide mb-0.5">Avg Allocs/Op</div>
+            <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Avg Allocs/Op</div>
             <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{avgAllocs.toFixed(1)}</div>
           </div>
           <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
-            <div className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide mb-0.5">Avg Bytes/Op</div>
+            <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Avg Bytes/Op</div>
             <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{fmtBytes(avgBytes)}</div>
           </div>
         </div>
@@ -556,7 +556,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning }: P
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-gray-800 dark:text-ctp-text">{s.title}</div>
                     <div className="text-gray-600 dark:text-ctp-subtext0 mt-0.5 leading-relaxed">{s.description}</div>
-                    {s.benchmark && <div className="text-xs font-mono text-gray-400 dark:text-ctp-overlay1 mt-1">{s.benchmark}</div>}
+                    {s.benchmark && <div className="text-xs font-mono text-gray-400 dark:text-ctp-subtext1 mt-1">{s.benchmark}</div>}
                   </div>
                 </div>
               </div>
