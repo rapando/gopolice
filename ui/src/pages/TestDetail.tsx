@@ -41,32 +41,32 @@ export default function TestDetail({ testResult, issues, pkgName, testName, onBa
           <span className={`px-2.5 py-1 rounded text-xs font-medium ${statusBadge[test.status] || 'bg-gray-50 text-gray-700 dark:bg-ctp-mantle dark:text-ctp-subtext0'}`}>
             {test.status}
           </span>
-          <span className="text-sm font-mono text-gray-500 dark:text-ctp-overlay0">{pkgName}</span>
-          <span className="text-xs text-gray-400 dark:text-ctp-overlay1">/</span>
+          <span className="text-sm font-mono text-gray-500 dark:text-ctp-subtext0">{pkgName}</span>
+          <span className="text-xs text-gray-400 dark:text-ctp-subtext1">/</span>
           <span className="text-sm font-medium text-gray-900 dark:text-ctp-text">{test.name}</span>
           {test.duration > 0 && (
-            <span className="text-xs text-gray-400 dark:text-ctp-overlay1 ml-auto font-mono">{(test.duration / 1e9).toFixed(3)}s</span>
+            <span className="text-xs text-gray-400 dark:text-ctp-subtext1 ml-auto font-mono">{(test.duration / 1e9).toFixed(3)}s</span>
           )}
         </div>
 
         <div className="px-6 py-4 grid grid-cols-4 gap-6 text-sm">
           <div>
-            <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-1">Status</p>
+            <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-1">Status</p>
             <p className={`font-medium ${test.status === 'FAIL' ? 'text-red-600 dark:text-ctp-red' : test.status === 'SKIP' ? 'text-yellow-600 dark:text-ctp-yellow' : 'text-green-600 dark:text-ctp-green'}`}>
               {test.status}
             </p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-1">Duration</p>
+            <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-1">Duration</p>
             <p className="font-mono text-gray-700 dark:text-ctp-subtext0">{(test.duration / 1e9).toFixed(3)}s</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-1">Package</p>
+            <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-1">Package</p>
             <p className="font-mono text-gray-700 dark:text-ctp-subtext0 truncate">{pkgName}</p>
           </div>
           {test.file && (
             <div>
-              <p className="text-xs text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide font-medium mb-1">File</p>
+              <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-1">File</p>
               <p className="font-mono text-blue-600 dark:text-ctp-blue truncate text-xs">{test.file}{test.line ? `:${test.line}` : ''}</p>
             </div>
           )}
@@ -93,7 +93,7 @@ export default function TestDetail({ testResult, issues, pkgName, testName, onBa
       {outputLines.length > 0 ? (
         <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded overflow-hidden">
           <div className="px-6 py-3 border-b border-gray-200 dark:border-ctp-surface1">
-            <p className="text-xs font-semibold text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide">Verbose output ({outputLines.length} lines)</p>
+            <p className="text-xs font-semibold text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide">Verbose output ({outputLines.length} lines)</p>
           </div>
           <div className="divide-y divide-gray-100 dark:divide-ctp-surface1 max-h-96 overflow-y-auto">
             {outputLines.map((line, i) => {
@@ -114,7 +114,7 @@ export default function TestDetail({ testResult, issues, pkgName, testName, onBa
         </div>
       ) : (
         <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded p-8 text-center">
-          <p className="text-gray-400 dark:text-ctp-overlay1 text-sm">Test passed with no output.</p>
+          <p className="text-gray-400 dark:text-ctp-subtext1 text-sm">Test passed with no output.</p>
         </div>
       )}
     </div>

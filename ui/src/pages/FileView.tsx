@@ -35,14 +35,14 @@ export default function FileView({ filePath, issues, onBack }: Props) {
 
       <div className="flex items-baseline gap-3 mb-5">
         <h2 className="text-base font-bold font-mono text-gray-800 dark:text-ctp-text truncate">{filePath}</h2>
-        <span className="text-sm text-gray-400 dark:text-ctp-overlay1 shrink-0">
+        <span className="text-sm text-gray-400 dark:text-ctp-subtext1 shrink-0">
           {fileIssues.length} issue{fileIssues.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       {fileIssues.length === 0 ? (
         <div className="card p-8 text-center">
-          <p className="text-gray-500 dark:text-ctp-overlay0">No issues in this file.</p>
+          <p className="text-gray-500 dark:text-ctp-subtext0">No issues in this file.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -53,7 +53,7 @@ export default function FileView({ filePath, issues, onBack }: Props) {
               <div key={line} className="card overflow-hidden">
                 <div className="px-5 py-2.5 border-b border-gray-200 dark:border-ctp-surface1 bg-gray-50 dark:bg-ctp-mantle flex items-center gap-2">
                   <span className="text-xs font-medium text-gray-600 dark:text-ctp-subtext0 font-mono">Line {line}</span>
-                  <span className="text-xs text-gray-400 dark:text-ctp-overlay1">
+                  <span className="text-xs text-gray-400 dark:text-ctp-subtext1">
                     {lineIssues.length} issue{lineIssues.length !== 1 ? 's' : ''}
                   </span>
                 </div>
@@ -63,8 +63,8 @@ export default function FileView({ filePath, issues, onBack }: Props) {
                     <span className={`text-base shrink-0 pt-0.5 ${sevColor[issue.severity]}`}>{sevIcon[issue.severity]}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-xs font-medium uppercase text-gray-400 dark:text-ctp-overlay1">{issue.severity}</span>
-                        <span className="text-xs text-gray-400 dark:text-ctp-overlay1 font-mono">{issue.scanner}:{issue.rule}</span>
+                        <span className="text-xs font-medium uppercase text-gray-400 dark:text-ctp-subtext1">{issue.severity}</span>
+                        <span className="text-xs text-gray-400 dark:text-ctp-subtext1 font-mono">{issue.scanner}:{issue.rule}</span>
                       </div>
                       <p className="text-sm text-gray-700 dark:text-ctp-subtext0">{issue.message}</p>
                     </div>
@@ -78,7 +78,7 @@ export default function FileView({ filePath, issues, onBack }: Props) {
                         key={l.number}
                         className={`flex ${l.is_issue ? 'bg-red-50 dark:bg-red-950/30 border-l-2 border-red-500' : ''}`}
                       >
-                        <span className="text-gray-400 dark:text-ctp-overlay1 text-right w-12 shrink-0 select-none py-0.5 pr-3 border-r border-gray-200 dark:border-ctp-surface1 mr-3">
+                        <span className="text-gray-400 dark:text-ctp-subtext1 text-right w-12 shrink-0 select-none py-0.5 pr-3 border-r border-gray-200 dark:border-ctp-surface1 mr-3">
                           {l.number}
                         </span>
                         <span className={`py-0.5 ${l.is_issue ? 'text-red-800 dark:text-ctp-red font-medium' : 'text-gray-700 dark:text-ctp-subtext0'}`}>

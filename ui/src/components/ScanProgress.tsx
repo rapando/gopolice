@@ -16,7 +16,7 @@ const scannerInfo: Record<string, { label: string; color: string }> = {
   depgraph:   { label: 'Deps',       color: 'text-teal-600 dark:text-ctp-teal' },
   git:        { label: 'Git',        color: 'text-cyan-600 dark:text-ctp-sky' },
   complexity: { label: 'Complexity', color: 'text-violet-600 dark:text-ctp-mauve' },
-  filestats:  { label: 'Files',      color: 'text-gray-600 dark:text-ctp-overlay1' },
+  filestats:  { label: 'Files',      color: 'text-gray-600 dark:text-ctp-subtext1' },
 }
 
 function formatTime(s: number): string {
@@ -96,14 +96,14 @@ export default function ScanProgress({ events, readingResults }: Props) {
                 <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-ctp-overlay1 animate-bounce" style={{ animationDelay: '0.3s' }} />
               </span>
             )}
-            {!readingResults && <span className="text-xs font-mono tabular-nums text-gray-400 dark:text-ctp-overlay1">{formatTime(elapsed)}</span>}
+            {!readingResults && <span className="text-xs font-mono tabular-nums text-gray-400 dark:text-ctp-subtext1">{formatTime(elapsed)}</span>}
           </div>
-          <span className="text-xs font-mono tabular-nums text-gray-400 dark:text-ctp-overlay1/70">{completedCount}/{totalCount}</span>
+          <span className="text-xs font-mono tabular-nums text-gray-400 dark:text-ctp-subtext1/70">{completedCount}/{totalCount}</span>
         </div>
 
         {/* Progress bar or reading results */}
         {readingResults ? (
-          <div className="mb-4 flex items-center gap-3 text-xs text-gray-500 dark:text-ctp-overlay1">
+          <div className="mb-4 flex items-center gap-3 text-xs text-gray-500 dark:text-ctp-subtext1">
             <span>Scan completed in {formatTime(elapsed)}</span>
             <span className="text-gray-300 dark:text-ctp-surface1">&middot;</span>
             <span>{completedCount} scanners ran</span>
@@ -128,7 +128,7 @@ export default function ScanProgress({ events, readingResults }: Props) {
               <span className={`text-sm font-semibold ${scannerInfo[current.scanner]?.color || 'text-gray-700 dark:text-ctp-subtext0'}`}>
                 {scannerInfo[current.scanner]?.label || current.scanner}
               </span>
-              <span className="text-gray-500 dark:text-ctp-overlay1 truncate">{current.message}</span>
+              <span className="text-gray-500 dark:text-ctp-subtext1 truncate">{current.message}</span>
             </div>
           )}
 
@@ -151,7 +151,7 @@ export default function ScanProgress({ events, readingResults }: Props) {
                     <span className={`text-[13px] font-semibold ${info?.color || 'text-gray-600 dark:text-ctp-subtext0'}`}>
                       {info?.label || s.scanner}
                     </span>
-                    <span className="text-gray-500 dark:text-ctp-overlay1 truncate">{s.message}</span>
+                    <span className="text-gray-500 dark:text-ctp-subtext1 truncate">{s.message}</span>
                   </div>
                 )
               })}
@@ -160,7 +160,7 @@ export default function ScanProgress({ events, readingResults }: Props) {
 
           {/* Waiting */}
           {steps.length === 0 && !readingResults && (
-            <div className="flex items-center gap-2.5 py-1 text-gray-400 dark:text-ctp-overlay0">
+            <div className="flex items-center gap-2.5 py-1 text-gray-400 dark:text-ctp-subtext0">
               <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-ctp-surface1 animate-pulse shrink-0" />
               starting...
             </div>

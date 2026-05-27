@@ -195,7 +195,7 @@ export default function FixPlan({ issues, projectName, onClose }: Props) {
             </button>
             <button
               onClick={onClose}
-              className="px-3 py-1.5 text-xs font-medium rounded text-gray-500 hover:text-gray-700 dark:text-ctp-overlay0 dark:hover:text-ctp-text transition-colors"
+              className="px-3 py-1.5 text-xs font-medium rounded text-gray-500 hover:text-gray-700 dark:text-ctp-subtext0 dark:hover:text-ctp-text transition-colors"
             >
               Close
             </button>
@@ -206,7 +206,7 @@ export default function FixPlan({ issues, projectName, onClose }: Props) {
           <div
             className={`${preview ? 'hidden' : 'flex'} flex-col w-1/2 border-r border-gray-200 dark:border-ctp-surface1`}
           >
-            <div className="shrink-0 px-4 py-1.5 text-xs text-gray-500 dark:text-ctp-overlay1 bg-gray-50 dark:bg-ctp-mantle border-b border-gray-200 dark:border-ctp-surface1 font-medium">
+            <div className="shrink-0 px-4 py-1.5 text-xs text-gray-500 dark:text-ctp-subtext1 bg-gray-50 dark:bg-ctp-mantle border-b border-gray-200 dark:border-ctp-surface1 font-medium">
               Markdown
             </div>
             <textarea
@@ -218,7 +218,7 @@ export default function FixPlan({ issues, projectName, onClose }: Props) {
           <div
             className={`${preview ? 'w-full' : 'w-1/2'} overflow-auto`}
           >
-            <div className="shrink-0 px-4 py-1.5 text-xs text-gray-500 dark:text-ctp-overlay1 bg-gray-50 dark:bg-ctp-mantle border-b border-gray-200 dark:border-ctp-surface1 font-medium">
+            <div className="shrink-0 px-4 py-1.5 text-xs text-gray-500 dark:text-ctp-subtext1 bg-gray-50 dark:bg-ctp-mantle border-b border-gray-200 dark:border-ctp-surface1 font-medium">
               Preview
             </div>
             <div

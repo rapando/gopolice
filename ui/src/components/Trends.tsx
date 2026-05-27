@@ -45,7 +45,7 @@ export default function Trends() {
       <div className="mt-8">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-ctp-subtext1 uppercase tracking-wide mb-4">Trends</h3>
         <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded p-8 text-center">
-          <p className="text-gray-400 dark:text-ctp-overlay0 text-sm">Loading trends...</p>
+          <p className="text-gray-400 dark:text-ctp-subtext0 text-sm">Loading trends...</p>
         </div>
       </div>
     )
@@ -100,7 +100,7 @@ export default function Trends() {
               className={`px-2.5 py-1 text-xs rounded transition-colors ${
                 range === r.key
                   ? 'bg-blue-100 text-blue-700 dark:bg-ctp-surface1 dark:text-ctp-lavender'
-                  : 'text-gray-500 hover:text-gray-700 dark:text-ctp-overlay0 dark:hover:text-ctp-text'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-ctp-subtext0 dark:hover:text-ctp-text'
               }`}
             >
               {r.label}
@@ -118,7 +118,7 @@ export default function Trends() {
               className={`px-4 py-2 text-xs font-medium transition-colors ${
                 activeChart === t.key
                   ? 'text-blue-600 border-b-2 border-blue-500 dark:text-ctp-lavender dark:border-ctp-lavender'
-                  : 'text-gray-500 hover:text-gray-700 dark:text-ctp-overlay0 dark:hover:text-ctp-text'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-ctp-subtext0 dark:hover:text-ctp-text'
               }`}
             >
               {t.label}

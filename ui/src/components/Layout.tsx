@@ -15,12 +15,12 @@ interface LayoutProps {
 const navItems = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'issues', label: 'Issues' },
+  { id: 'security', label: 'Security' },
   { id: 'tests', label: 'Tests' },
   { id: 'performance', label: 'Performance' },
   { id: 'deadcode', label: 'Dead Code' },
   { id: 'depgraph', label: 'Deps Graph' },
   { id: 'history', label: 'History' },
-  { id: 'security', label: 'Security' },
   { id: 'git', label: 'Git' },
   { id: 'config', label: 'Config' },
 ]
@@ -53,7 +53,7 @@ export default function Layout({ page, onNavigate, scanning, onScan, children, h
       <header className="bg-white border-b border-gray-200 flex items-center shrink-0 px-5 dark:bg-ctp-mantle dark:border-ctp-surface1">
         <div className="flex items-center gap-6 mr-8">
           <h1 className="font-bold text-base tracking-tight text-gray-800 dark:text-ctp-text">gopolice</h1>
-          {projectName && <span className="text-sm text-gray-500 dark:text-ctp-overlay1 ml-2 border-l border-gray-300 dark:border-ctp-surface1 pl-2">{projectName}</span>}
+          {projectName && <span className="text-sm text-gray-500 dark:text-ctp-subtext1 ml-2 border-l border-gray-300 dark:border-ctp-surface1 pl-2">{projectName}</span>}
         </div>
 
         <nav className="flex items-center gap-1 flex-1">
@@ -64,7 +64,7 @@ export default function Layout({ page, onNavigate, scanning, onScan, children, h
               className={`px-3 py-3 text-sm transition-colors border-b-2 ${
                 page === item.id
                   ? 'border-blue-500 text-blue-600 font-medium dark:border-ctp-lavender dark:text-ctp-lavender'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-ctp-overlay0 dark:hover:text-ctp-text dark:hover:border-ctp-surface1'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-ctp-subtext0 dark:hover:text-ctp-text dark:hover:border-ctp-surface1'
               }`}
             >
               {item.label}
@@ -75,7 +75,7 @@ export default function Layout({ page, onNavigate, scanning, onScan, children, h
         <div className="flex items-center gap-2">
           <button
             onClick={toggleDark}
-            className="p-2 text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100 dark:text-ctp-overlay1 dark:hover:text-ctp-text dark:hover:bg-ctp-surface0 transition-colors"
+            className="p-2 text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100 dark:text-ctp-subtext1 dark:hover:text-ctp-text dark:hover:bg-ctp-surface0 transition-colors"
             title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {dark ? (
@@ -90,7 +90,7 @@ export default function Layout({ page, onNavigate, scanning, onScan, children, h
           </button>
 
           {scanning ? (
-            <span className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-400 dark:text-ctp-overlay0 bg-gray-100 dark:bg-ctp-surface1 rounded cursor-not-allowed select-none">
+            <span className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-400 dark:text-ctp-subtext0 bg-gray-100 dark:bg-ctp-surface1 rounded cursor-not-allowed select-none">
               <span className="w-3 h-3 rounded-full border-2 border-gray-300 dark:border-ctp-overlay0 border-t-transparent animate-spin" />
               Scanning
             </span>
@@ -121,7 +121,7 @@ export default function Layout({ page, onNavigate, scanning, onScan, children, h
 
       <main className="flex-1 overflow-auto bg-gray-50 dark:bg-ctp-base">{children}</main>
 
-      <footer className="shrink-0 px-5 py-1 text-xs text-gray-400 bg-white border-t border-gray-100 flex justify-end items-center gap-1 dark:bg-ctp-mantle dark:border-ctp-surface1 dark:text-ctp-overlay0">
+      <footer className="shrink-0 px-5 py-1 text-xs text-gray-400 bg-white border-t border-gray-100 flex justify-end items-center gap-1 dark:bg-ctp-mantle dark:border-ctp-surface1 dark:text-ctp-subtext0">
         {version && <span>{version}</span>}
         <span>&copy; Rapando</span>
       </footer>
