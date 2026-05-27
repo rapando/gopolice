@@ -57,23 +57,38 @@ func (s *LintScanner) Run(ctx context.Context, cfg *config.Config, progress chan
 	return s.runGoVet(ctx, projectDir, progress, start)
 }
 
+func golangciLintArgs() []string {
+	out := exec.Command("golangci-lint", "version")
+	b, err := out.Output()
+	if err == nil && len(b) > 0 {
+		// golangci-lint v2+: "golangci-lint has version 2.x.x ..."
+		if m := regexp.MustCompile(`version (\d+)\.`).FindStringSubmatch(string(b)); len(m) > 1 && m[1] >= "2" {
+			return []string{"run", "--output.json.path=stdout", "--output.text.path=stderr", "--show-stats=false", "--issues-exit-code=0", "./..."}
+		}
+	}
+	return []string{"run", "--out-format=json", "--issues-exit-code=0", "./..."}
+}
+
 func (s *LintScanner) runGolangciLint(ctx context.Context, projectDir string, progress chan<- ProgressEvent) (*Result, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "golangci-lint", "run", "--out-format=json", "--issues-exit-code=0", "./...")
+	cmd := exec.CommandContext(ctx, "golangci-lint", golangciLintArgs()...)
 	cmd.Dir = projectDir
 	output, err := cmd.Output()
-	if err != nil {
+
+	var parsed golangciLintOutput
+	parseErr := json.Unmarshal(output, &parsed)
+	if parseErr != nil {
 		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusFailed, Message: fmt.Sprintf("golangci-lint failed: %v", err), Error: err}
 		return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: nil, Error: err}, nil
 	}
 
-	var parsed golangciLintOutput
-	if err := json.Unmarshal(output, &parsed); err != nil {
-		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusFailed, Message: fmt.Sprintf("failed to parse golangci-lint output: %v", err), Error: err}
-		return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: nil, Error: err}, nil
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			progress <- ProgressEvent{Scanner: s.Name(), Status: StatusRunning, Message: fmt.Sprintf("golangci-lint exited with code %d, partial results", exitErr.ExitCode())}
+		}
 	}
 
 	issues := make([]model.Issue, 0, len(parsed.Issues))
