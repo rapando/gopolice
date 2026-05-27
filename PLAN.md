@@ -13,11 +13,13 @@
   - Self-contained HTML (CSS inlined)
   - Sections: summary, issues by severity/category, test results, git stats
 
-- [ ] **SARIF export** — standard format for GitHub Code Scanning / GitLab SAST
+- [x] **SARIF export** — standard format for GitHub Code Scanning / GitLab SAST
 
   - Implement `internal/exporter/sarif.go`
   - Map `model.Issue` → SARIF `result` objects
   - Output as `.sarif` file, compatible with `github/codeql-action/upload-sarif`
+  - Added `gopolice scan --output sarif` CLI flag (writes to stdout)
+  - Also supports `gopolice scan --output json` for native JSON output
 
 - [ ] **JUnit XML export** — test result format for CI
 

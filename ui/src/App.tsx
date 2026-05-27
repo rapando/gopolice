@@ -13,7 +13,7 @@ import GitStats from './pages/GitStats'
 import ConfigPage from './pages/Config'
 import History from './pages/History'
 import Layout from './components/Layout'
-import { getResults, subscribeStatus, ProgressEvent, ScanResult, triggerScan } from './api/client'
+import { getResults, subscribeStatus, type ProgressEvent, type ScanResult, triggerScan } from './api/client'
 
 type Page = 'dashboard' | 'issues' | 'issue' | 'file' | 'tests' | 'testdetail' | 'performance' | 'deadcode' | 'depgraph' | 'history' | 'security' | 'git' | 'config'
 
@@ -22,7 +22,8 @@ export default function App() {
   const [result, setResult] = useState<ScanResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
-  const [scanLog, setScanLog] = useState<string[]>([])
+  const [readingResults, setReadingResults] = useState(false)
+  const [scanEvents, setScanEvents] = useState<ProgressEvent[]>([])
   const [selectedIssue, setSelectedIssue] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [selectedPkg, setSelectedPkg] = useState<string>('')
@@ -37,11 +38,16 @@ export default function App() {
 
   useEffect(() => {
     const unsub = subscribeStatus((e: ProgressEvent) => {
-      setScanLog((prev) => [...prev, `[${e.scanner}] ${e.message}`])
+      setScanEvents((prev) => [...prev, e])
       if (e.status === 'completed' && e.scanner === 'pipeline') {
-        getResults().then(setResult).catch(() => {})
-        setScanning(false)
-        setHistoricalLabel(null)
+        setScanning(true)
+        setReadingResults(true)
+        setTimeout(() => {
+          getResults().then(setResult).catch(() => {})
+          setScanning(false)
+          setReadingResults(false)
+          setHistoricalLabel(null)
+        }, 2000)
       }
       if (e.status === 'failed') {
         setScanning(false)
@@ -54,7 +60,7 @@ export default function App() {
   }, [])
 
   const handleScan = () => {
-    setScanLog([])
+    setScanEvents([])
     setScanning(true)
     triggerScan().catch(() => {})
   }
@@ -91,7 +97,7 @@ export default function App() {
           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
         </div>
       ) : page === 'dashboard' ? (
-        <Dashboard result={result} scanLog={scanLog} scanning={scanning} onScan={handleScan} />
+        <Dashboard result={result} scanEvents={scanEvents} scanning={scanning} readingResults={readingResults} onScan={handleScan} />
       ) : page === 'issues' ? (
         <Issues
           issues={result?.issues ?? []}

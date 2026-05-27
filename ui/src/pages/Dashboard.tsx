@@ -1,10 +1,12 @@
-import { ScanResult, computeGrade } from '../api/client'
+import { ScanResult, computeGrade, ProgressEvent } from '../api/client'
 import Trends from '../components/Trends'
+import ScanProgress from '../components/ScanProgress'
 
 interface Props {
   result: ScanResult | null
-  scanLog: string[]
+  scanEvents: ProgressEvent[]
   scanning: boolean
+  readingResults: boolean
   onScan: () => void
 }
 
@@ -18,28 +20,25 @@ function Metric({ label, value, color, sub }: { label: string; value: string | n
   )
 }
 
-export default function Dashboard({ result, scanLog, scanning, onScan }: Props) {
+export default function Dashboard({ result, scanEvents, scanning, readingResults, onScan }: Props) {
+  const showProgress = scanning || readingResults
+
   if (!result) {
     return (
       <div className="max-w-5xl mx-auto p-8">
-        <div className="card p-10 text-center">
-          <p className="text-gray-500 dark:text-ctp-overlay0 mb-4">No scan results yet.</p>
-          <button
-            onClick={onScan}
-            disabled={scanning}
-            className="px-4 py-2 text-sm font-medium bg-green-600 text-white dark:bg-ctp-green dark:text-ctp-base rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
-          >
-            {scanning ? 'Scanning...' : 'Run Scan'}
-          </button>
-          {scanLog.length > 0 && (
-            <div className="mt-5 text-left">
-              <p className="text-xs font-medium text-gray-500 dark:text-ctp-overlay0 mb-2 uppercase tracking-wide">Log</p>
-              <div className="bg-gray-100 dark:bg-ctp-surface0 rounded p-3 text-xs font-mono max-h-32 overflow-auto leading-relaxed">
-                {scanLog.map((l, i) => <div key={i} className="text-gray-600 dark:text-ctp-subtext0">{l}</div>)}
-              </div>
-            </div>
-          )}
-        </div>
+        {showProgress ? (
+          <ScanProgress events={scanEvents} readingResults={readingResults} />
+        ) : (
+          <div className="card p-10 text-center">
+            <p className="text-gray-500 dark:text-ctp-overlay0 mb-4">No scan results yet.</p>
+            <button
+              onClick={onScan}
+              className="px-4 py-2 text-sm font-medium bg-green-600 text-white dark:bg-ctp-green dark:text-ctp-base rounded hover:bg-green-700 transition-colors"
+            >
+              Run Scan
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -124,12 +123,9 @@ export default function Dashboard({ result, scanLog, scanning, onScan }: Props) 
         </div>
       )}
 
-      {scanLog.length > 0 && (
-        <div className="card p-4">
-          <p className="text-xs font-medium text-gray-500 dark:text-ctp-overlay0 uppercase tracking-wide mb-2">Scan Log</p>
-          <div className="bg-gray-100 dark:bg-ctp-surface0 rounded p-2.5 text-xs font-mono max-h-32 overflow-auto leading-relaxed">
-            {scanLog.map((l, i) => <div key={i} className="text-gray-600 dark:text-ctp-subtext0">{l}</div>)}
-          </div>
+      {showProgress && (
+        <div className="mb-6">
+          <ScanProgress events={scanEvents} readingResults={readingResults} />
         </div>
       )}
     </div>

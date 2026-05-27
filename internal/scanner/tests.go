@@ -57,9 +57,6 @@ func (s *TestScanner) Run(ctx context.Context, cfg *config.Config, progress chan
 				}
 			}
 		}
-		if coverageResult.Total.Total > 0 {
-			testResult.Total = coverageResult.Total
-		}
 	}
 
 	s.locateTestFileLocations(projectDir, testResult)

@@ -89,13 +89,19 @@ export default function Layout({ page, onNavigate, scanning, onScan, children, h
             )}
           </button>
 
-          <button
-            onClick={onScan}
-            disabled={scanning}
-            className="px-4 py-1.5 text-sm font-medium bg-green-600 hover:bg-green-700 disabled:bg-gray-100 disabled:text-gray-400 rounded transition-colors text-white disabled:cursor-not-allowed dark:bg-ctp-green dark:text-ctp-base dark:hover:bg-ctp-teal dark:disabled:bg-ctp-surface1 dark:disabled:text-ctp-overlay0"
-          >
-            {scanning ? 'Scanning...' : 'Run Scan'}
-          </button>
+          {scanning ? (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-400 dark:text-ctp-overlay0 bg-gray-100 dark:bg-ctp-surface1 rounded cursor-not-allowed select-none">
+              <span className="w-3 h-3 rounded-full border-2 border-gray-300 dark:border-ctp-overlay0 border-t-transparent animate-spin" />
+              Scanning
+            </span>
+          ) : (
+            <button
+              onClick={onScan}
+              className="px-4 py-1.5 text-sm font-medium bg-green-600 hover:bg-green-700 rounded transition-colors text-white dark:bg-ctp-green dark:text-ctp-base dark:hover:bg-ctp-teal"
+            >
+              Run Scan
+            </button>
+          )}
         </div>
       </header>
 

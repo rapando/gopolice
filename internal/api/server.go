@@ -142,6 +142,10 @@ func (s *Server) Watch(debounce time.Duration) (*watcher.Watcher, error) {
 	return w, nil
 }
 
+func (s *Server) SetResult(result *model.ScanResult) {
+	s.store.Set(result)
+}
+
 func (s *Server) Shutdown(ctx context.Context) error {
 	if s.server != nil {
 		return s.server.Shutdown(ctx)
