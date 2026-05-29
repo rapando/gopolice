@@ -10,8 +10,8 @@
 - `go test ./...` — run all tests
 - `go test -v -count=1 ./...` — verbose, no cache
 - `go test -race -count=1 ./...` — with race detector
-- `make test` — run all tests with verbose
-- `make test-race` — run with race detector
+- `make test` — run all tests with verbose on all CPU cores (auto-detected)
+- `make test-race` — run with race detector on all CPU cores (auto-detected)
 
 ## Lint
 - `go vet ./...` — standard Go vet

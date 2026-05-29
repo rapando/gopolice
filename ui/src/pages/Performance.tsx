@@ -1,12 +1,14 @@
 import { useMemo, useRef, useEffect, useState } from 'react'
 import * as d3 from 'd3'
 import { BenchmarkResult, ProfileData, ProfileEntry } from '../api/client'
+import PerformancePlan from '../components/PerformancePlan'
 
 interface Props {
   benchmarks: BenchmarkResult[] | null
   profile: ProfileData | null
   onScan?: () => void
   scanning?: boolean
+  projectName?: string
 }
 
 function fmtDuration(ns: number): string {
@@ -442,7 +444,7 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
   )
 }
 
-export default function Performance({ benchmarks, profile, onScan, scanning }: Props) {
+export default function Performance({ benchmarks, profile, onScan, scanning, projectName }: Props) {
   const hasBenchmarks = benchmarks && benchmarks.length > 0
   const hasProfile = profile && ((profile.cpu && profile.cpu.length > 0) || (profile.mem && profile.mem.length > 0))
 
@@ -469,6 +471,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning }: P
   }, [profile])
 
   const suggestions = useMemo(() => generateSuggestions(benchmarks || [], profile), [benchmarks, profile])
+  const [showPlan, setShowPlan] = useState(false)
 
   if (!hasBenchmarks && !hasProfile) {
     return (
@@ -490,6 +493,17 @@ export default function Performance({ benchmarks, profile, onScan, scanning }: P
     <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1400px)' }}>
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text">Performance</h2>
+        {(hasBenchmarks || hasProfile) && (
+          <button
+            onClick={() => setShowPlan(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            Generate Plan
+          </button>
+        )}
       </div>
 
       {/* Summary cards */}
@@ -577,6 +591,15 @@ export default function Performance({ benchmarks, profile, onScan, scanning }: P
           <ProfileTable title="CPU — Top Functions" entries={profile!.cpu} maxFlat={allProfileMaxFlat} />
           <ProfileTable title="Memory — Top Allocations" entries={profile!.mem} maxFlat={allProfileMaxFlat} />
         </section>
+      )}
+
+      {showPlan && (
+        <PerformancePlan
+          benchmarks={benchmarks}
+          profile={profile}
+          projectName={projectName || 'project'}
+          onClose={() => setShowPlan(false)}
+        />
       )}
     </div>
   )

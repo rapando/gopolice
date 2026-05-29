@@ -114,7 +114,7 @@ export default function App() {
       ) : page === 'testdetail' ? (
         <TestDetail testResult={result?.test_results ?? null} issues={result?.issues ?? []} pkgName={selectedPkg} testName={selectedTest} onBack={() => navigate('tests')} />
       ) : page === 'performance' ? (
-        <Performance benchmarks={result?.benchmarks ?? null} profile={result?.profile ?? null} onScan={handleScan} scanning={scanning} />
+        <Performance benchmarks={result?.benchmarks ?? null} profile={result?.profile ?? null} onScan={handleScan} scanning={scanning} projectName={result?.project_name} />
       ) : page === 'deadcode' ? (
         <DeadCode issues={result?.issues ?? []} onSelectIssue={(id) => navigate('issue', id)} onSelectFile={(f) => navigate('file', f)} />
       ) : page === 'depgraph' ? (
