@@ -153,3 +153,21 @@ func TestDefaultLoadConfig_WithGlobal(t *testing.T) {
 		t.Errorf("expected port 8888, got %d", loaded.Port)
 	}
 }
+
+func BenchmarkMarshalConfig(b *testing.B) {
+	cfg := config.DefaultConfig()
+	for range b.N {
+		_, _ = config.Marshal(cfg)
+	}
+}
+
+func BenchmarkSaveAndLoadConfig(b *testing.B) {
+	cfg := config.DefaultConfig()
+	cfg.Port = 9090
+	for range b.N {
+		tmpDir := b.TempDir()
+		path := filepath.Join(tmpDir, "config.yaml")
+		_ = config.SaveConfigFile(cfg, path)
+		_, _ = config.LoadConfigFile(path)
+	}
+}

@@ -24,3 +24,17 @@ func TestTimestampZero(t *testing.T) {
 		t.Fatalf("zero time round-trip: %v", err)
 	}
 }
+
+func BenchmarkEncodeTimestamp(b *testing.B) {
+	now := time.Now().UTC().Truncate(time.Second)
+	for range b.N {
+		encodeTimestamp(now)
+	}
+}
+
+func BenchmarkDecodeTimestamp(b *testing.B) {
+	encoded := "2006-01-02T15:04:05Z"
+	for range b.N {
+		_, _ = decodeTimestamp(encoded)
+	}
+}

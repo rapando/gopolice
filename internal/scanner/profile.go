@@ -40,40 +40,49 @@ func (s *ProfileScanner) Run(ctx context.Context, cfg *config.Config, progress c
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 
-	tmpDir, err := os.MkdirTemp("", "gopolice-profile-*")
+	pkgs, err := listBenchmarkablePackages(ctx, projectDir)
 	if err != nil {
-		return nil, fmt.Errorf("create temp dir: %w", err)
+		return nil, fmt.Errorf("list packages: %w", err)
 	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	cpuProfile := filepath.Join(tmpDir, "cpu.pprof")
-	memProfile := filepath.Join(tmpDir, "mem.pprof")
-
-	cmd := exec.CommandContext(ctx, "go", "test", "-bench=.", "-cpuprofile="+cpuProfile, "-memprofile="+memProfile, "-count=1", "./...") //nolint:gosec // paths from MkdirTemp, not user input
-	cmd.Dir = projectDir
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		if len(output) == 0 {
-			progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: "No test files to profile", Elapsed: time.Since(start)}
-			return &Result{ScannerName: s.Name(), Duration: time.Since(start)}, nil
-		}
+	if len(pkgs) == 0 {
+		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: "No packages with test files to profile", Elapsed: time.Since(start)}
+		return &Result{ScannerName: s.Name(), Duration: time.Since(start)}, nil
 	}
 
 	data := &model.ProfileData{}
 
-	if _, err := os.Stat(cpuProfile); err == nil {
-		entries, err := parsePprofOutput(ctx, cpuProfile)
-		if err == nil {
-			data.CPU = entries
+	for _, pkg := range pkgs {
+		select {
+		case <-ctx.Done():
+			return &Result{ScannerName: s.Name(), Duration: time.Since(start), Data: data}, ctx.Err()
+		default:
 		}
+
+		tmpDir, err := os.MkdirTemp("", "gopolice-profile-*")
+		if err != nil {
+			continue
+		}
+
+		cpuProfile := filepath.Join(tmpDir, "cpu.pprof")
+		memProfile := filepath.Join(tmpDir, "mem.pprof")
+
+		cmd := exec.CommandContext(ctx, "go", "test", "-bench=.", "-cpuprofile="+cpuProfile, "-memprofile="+memProfile, "-count=1", pkg)
+		cmd.Dir = projectDir
+		_, _ = cmd.CombinedOutput()
+
+		if entries, err := parsePprofOutput(ctx, cpuProfile); err == nil && len(entries) > 0 {
+			data.CPU = append(data.CPU, entries...)
+		}
+
+		if entries, err := parsePprofOutput(ctx, memProfile); err == nil && len(entries) > 0 {
+			data.Mem = append(data.Mem, entries...)
+		}
+
+		_ = os.RemoveAll(tmpDir)
 	}
 
-	if _, err := os.Stat(memProfile); err == nil {
-		entries, err := parsePprofOutput(ctx, memProfile)
-		if err == nil {
-			data.Mem = entries
-		}
-	}
+	data.CPU = mergeProfileEntries(data.CPU)
+	data.Mem = mergeProfileEntries(data.Mem)
 
 	count := len(data.CPU) + len(data.Mem)
 	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Profiled %d functions (CPU: %d, Mem: %d)", count, len(data.CPU), len(data.Mem)), Elapsed: time.Since(start)}
@@ -82,6 +91,59 @@ func (s *ProfileScanner) Run(ctx context.Context, cfg *config.Config, progress c
 		Duration:    time.Since(start),
 		Data:        data,
 	}, nil
+}
+
+func mergeProfileEntries(entries []model.ProfileEntry) []model.ProfileEntry {
+	merged := make(map[string]*model.ProfileEntry)
+	for _, e := range entries {
+		if existing, ok := merged[e.Function]; ok {
+			existing.Flat += e.Flat
+			existing.FlatPct += e.FlatPct
+			existing.Cum += e.Cum
+			existing.CumPct += e.CumPct
+		} else {
+			merged[e.Function] = &model.ProfileEntry{
+				Function: e.Function,
+				Flat:     e.Flat,
+				FlatPct:  e.FlatPct,
+				Cum:      e.Cum,
+				CumPct:   e.CumPct,
+			}
+		}
+	}
+	result := make([]model.ProfileEntry, 0, len(merged))
+	for _, e := range merged {
+		result = append(result, *e)
+	}
+	return result
+}
+
+func listBenchmarkablePackages(ctx context.Context, projectDir string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "go", "list", "-f", "{{.ImportPath}}\t{{.TestGoFiles}}\t{{.XTestGoFiles}}", "./...")
+	cmd.Dir = projectDir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var pkgs []string
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		importPath := parts[0]
+		testFiles := strings.Trim(parts[1], "[] ")
+		xtestFiles := strings.Trim(parts[2], "[] ")
+		if testFiles != "" || xtestFiles != "" {
+			pkgs = append(pkgs, importPath)
+		}
+	}
+	return pkgs, nil
 }
 
 func parsePprofOutput(ctx context.Context, profilePath string) ([]model.ProfileEntry, error) {

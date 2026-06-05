@@ -235,6 +235,28 @@ func TestExportSARIF_ModuleInProperties(t *testing.T) {
 	}
 }
 
+func BenchmarkExportSARIF(b *testing.B) {
+	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC)
+	result := &model.ScanResult{
+		ProjectName: "test-project",
+		ScanTime:    now,
+		Duration:    5 * time.Second,
+		Issues: []model.Issue{
+			{ID: "lint-1", Scanner: "golint", Rule: "exported_comment", Severity: model.SeverityError, File: "main.go", Line: 10, Column: 1, Message: "exported function Foo should have comment or be unexported", Category: model.CategoryStyle, Solution: "Add a comment to Foo"},
+			{ID: "sec-1", Scanner: "gosec", Rule: "G101", Severity: model.SeverityWarning, File: "internal/auth/token.go", Line: 42, Message: "Potential hardcoded credential", Category: model.CategorySecurity, Module: "github.com/example/auth"},
+			{ID: "lint-2", Scanner: "golint", Rule: "naming", Severity: model.SeverityWarning, File: "foo.go", Line: 5, Message: "naming convention", Category: model.CategoryStyle},
+			{ID: "lint-3", Scanner: "golint", Rule: "comment", Severity: model.SeverityInfo, File: "bar.go", Line: 3, Message: "missing comment", Category: model.CategoryStyle},
+			{ID: "sec-2", Scanner: "gosec", Rule: "G201", Severity: model.SeverityError, File: "db.go", Line: 20, Message: "SQL injection", Category: model.CategorySecurity},
+			{ID: "lint-4", Scanner: "golint", Rule: "format", Severity: model.SeverityWarning, File: "fmt.go", Line: 15, Message: "format string", Category: model.CategoryStyle},
+		},
+	}
+	var buf bytes.Buffer
+	for range b.N {
+		buf.Reset()
+		_ = ExportSARIF(result, "v1.0.0", &buf)
+	}
+}
+
 func TestExportSARIF_InvalidOutputFmt(t *testing.T) {
 	var buf bytes.Buffer
 	if err := ExportSARIF(&model.ScanResult{ProjectName: "x"}, "dev", &buf); err != nil {

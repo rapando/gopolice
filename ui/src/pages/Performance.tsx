@@ -106,6 +106,291 @@ function generateSuggestions(benchmarks: BenchmarkResult[], profile: ProfileData
   return suggestions
 }
 
+function extractPkg(fn: string): string {
+  const parts = fn.split('/')
+  if (parts.length >= 3) return parts[parts.length - 2]
+  const dot = fn.lastIndexOf('.')
+  if (dot > 0) {
+    const pkg = fn.slice(0, dot)
+    const lastSlash = pkg.lastIndexOf('/')
+    return lastSlash >= 0 ? pkg.slice(lastSlash + 1) : pkg
+  }
+  return '(global)'
+}
+
+function extractFnShort(fn: string): string {
+  const dot = fn.lastIndexOf('.')
+  return dot > 0 ? fn.slice(dot + 1) : fn
+}
+
+const profileColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#6366f1', '#a855f7', '#ec4899', '#14b8a6', '#84cc16']
+
+function BenchmarkRanking({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; data: BenchmarkResult | null }>({ x: 0, y: 0, data: null })
+
+  const sorted = useMemo(() => [...benchmarks].sort((a, b) => b.time_per_op - a.time_per_op), [benchmarks])
+  const maxTime = useMemo(() => Math.max(...benchmarks.map((b) => b.time_per_op), 1), [benchmarks])
+  const maxAllocs = useMemo(() => Math.max(...benchmarks.map((b) => b.allocs_per_op), 1), [benchmarks])
+
+  useEffect(() => {
+    if (!sorted.length || !svgRef.current) return
+    const svg = d3.select(svgRef.current)
+    svg.selectAll('*').remove()
+
+    const width = svgRef.current.clientWidth
+    const rowH = 28
+    const height = sorted.length * rowH + 40
+    const pad = { top: 10, right: 120, bottom: 20, left: 0 }
+    const innerW = width - pad.left - pad.right
+
+    svg.attr('viewBox', `0 0 ${width} ${height}`)
+
+    const xScale = d3.scaleLinear().domain([0, maxTime * 1.15]).range([0, innerW])
+    const colorScale = d3.scaleSequentialLog()
+      .domain([Math.max(maxAllocs, 1), 0])
+      .interpolator(d3.interpolateRgbBasis(['#22c55e', '#eab308', '#ef4444']))
+
+    const g = svg.append('g').attr('transform', `translate(${pad.left},${pad.top})`)
+
+    sorted.forEach((b, i) => {
+      const y = i * rowH
+      const w = Math.max(xScale(b.time_per_op), 2)
+      const color = b.allocs_per_op > 0 ? colorScale(b.allocs_per_op) : '#22c55e'
+
+      g.append('rect')
+        .attr('x', 0).attr('y', y).attr('width', w).attr('height', rowH - 4)
+        .attr('rx', 3).attr('fill', color).attr('opacity', 0.8)
+        .style('cursor', 'pointer')
+        .on('mouseover', function (event: MouseEvent) {
+          d3.select(this).attr('opacity', 1)
+          const rect = svgRef.current!.getBoundingClientRect()
+          setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top - 10, data: b })
+        })
+        .on('mousemove', function (event: MouseEvent) {
+          const rect = svgRef.current!.getBoundingClientRect()
+          setTooltip((prev) => ({ ...prev, x: event.clientX - rect.left, y: event.clientY - rect.top - 10 }))
+        })
+        .on('mouseout', function () {
+          d3.select(this).attr('opacity', 0.8)
+          setTooltip({ x: 0, y: 0, data: null })
+        })
+
+      g.append('text').attr('x', w + 6).attr('y', y + rowH / 2 + 1)
+        .attr('font-size', '11px').attr('fill', '#374151').attr('class', 'dark:fill-ctp-subtext1')
+        .attr('dominant-baseline', 'middle')
+        .text(`${fmtShortNS(b.time_per_op)} · ${b.allocs_per_op} allocs`)
+
+      g.append('text').attr('x', -4).attr('y', y + rowH / 2 + 1)
+        .attr('font-size', '11px').attr('fill', '#6b7280').attr('class', 'dark:fill-ctp-subtext0')
+        .attr('dominant-baseline', 'middle').attr('text-anchor', 'end')
+        .style('white-space', 'nowrap')
+        .text(extractShortName(b.name))
+    })
+
+    g.append('text').attr('x', 0).attr('y', height - pad.bottom + 6)
+      .attr('font-size', '10px').attr('fill', '#9ca3af').attr('class', 'dark:fill-ctp-overlay1')
+      .text('← faster')
+    g.append('text').attr('x', innerW).attr('y', height - pad.bottom + 6)
+      .attr('font-size', '10px').attr('fill', '#9ca3af').attr('class', 'dark:fill-ctp-overlay1')
+      .attr('text-anchor', 'end').text('slower →')
+  }, [sorted, maxTime, maxAllocs])
+
+  return (
+    <div className="relative bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg overflow-hidden mb-6">
+      <svg ref={svgRef} className="w-full" style={{ minHeight: 200 }} />
+      {tooltip.data && (
+        <div className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-relaxed max-w-xs"
+          style={{ left: Math.min(tooltip.x, window.innerWidth - 260), top: Math.max(tooltip.y, 10) }}
+        >
+          <div className="font-semibold text-sm mb-1 break-all">{tooltip.data.name}</div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-gray-300">
+            <span>Time/Op</span><span className="text-right font-mono text-green-400">{fmtDuration(tooltip.data.time_per_op)}</span>
+            <span>Iterations</span><span className="text-right font-mono">{tooltip.data.iterations.toLocaleString()}</span>
+            <span>Allocs/Op</span><span className="text-right font-mono">{tooltip.data.allocs_per_op}</span>
+            <span>Bytes/Op</span><span className="text-right font-mono">{fmtBytes(tooltip.data.bytes_per_op)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface DonutDatum { label: string; pct: number; fn: string }
+
+function AllocationDonut({ entries }: { entries: ProfileEntry[] }) {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string }>({ x: 0, y: 0, text: '' })
+
+  useEffect(() => {
+    if (!entries.length || !svgRef.current) return
+    const svg = d3.select(svgRef.current)
+    svg.selectAll('*').remove()
+
+    const sorted = [...entries].sort((a, b) => b.flat_pct - a.flat_pct)
+    const top = sorted.slice(0, 8)
+    const other = sorted.slice(8)
+    const otherPct = other.reduce((s, e) => s + e.flat_pct, 0)
+    const data: DonutDatum[] = top.map((e) => ({ label: extractFnShort(e.function), pct: e.flat_pct, fn: e.function }))
+    if (otherPct > 0) data.push({ label: 'Other', pct: otherPct, fn: '' })
+
+    const width = svgRef.current.clientWidth
+    const height = 320
+    const radius = Math.min(width, height) / 2 - 40
+
+    svg.attr('viewBox', `0 0 ${width} ${height}`)
+
+    const g = svg.append('g').attr('transform', `translate(${width / 2},${height / 2})`)
+
+    const pie = d3.pie<DonutDatum>().value((d) => d.pct).sort(null)
+    const arc = d3.arc<d3.PieArcDatum<DonutDatum>>().innerRadius(radius * 0.45).outerRadius(radius)
+    const hoverArc = d3.arc<d3.PieArcDatum<DonutDatum>>().innerRadius(radius * 0.45).outerRadius(radius + 8)
+
+    g.append('g').selectAll('path').data(pie(data)).join('path')
+      .attr('d', (d) => arc(d) as string)
+      .attr('fill', (_, i) => profileColors[i % profileColors.length])
+      .attr('opacity', 0.85)
+      .attr('stroke', '#fff').attr('stroke-width', 2)
+      .style('cursor', 'pointer')
+      .on('mouseover', function (event: MouseEvent, d) {
+        d3.select(this).attr('d', hoverArc(d) as string).attr('opacity', 1)
+        const rect = svgRef.current!.getBoundingClientRect()
+        setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top, text: `${d.data.fn || d.data.label}: ${d.data.pct.toFixed(1)}%` })
+      })
+      .on('mousemove', function (event: MouseEvent) {
+        const rect = svgRef.current!.getBoundingClientRect()
+        setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top, text: tooltip.text })
+      })
+      .on('mouseout', function () {
+        const d = d3.select(this).datum() as d3.PieArcDatum<DonutDatum>
+        d3.select(this).attr('d', arc(d) as string).attr('opacity', 0.85)
+        setTooltip({ x: 0, y: 0, text: '' })
+      })
+
+    // Center text
+    g.append('text').attr('text-anchor', 'middle').attr('y', -6)
+      .attr('font-size', '20px').attr('font-weight', 'bold').attr('fill', '#374151').attr('class', 'dark:fill-ctp-text')
+      .text(`${data.length} funcs`)
+    g.append('text').attr('text-anchor', 'middle').attr('y', 14)
+      .attr('font-size', '11px').attr('fill', '#6b7280').attr('class', 'dark:fill-ctp-subtext0')
+      .text('top allocators')
+
+    // Legend
+    const legG = svg.append('g').attr('transform', `translate(16, ${height - 10})`)
+    data.forEach((d, i) => {
+      const lx = i % 2 === 0 ? 0 : width / 2
+      const ly = Math.floor(i / 2) * 18
+      legG.append('rect').attr('x', lx).attr('y', ly - 10).attr('width', 10).attr('height', 10)
+        .attr('rx', 2).attr('fill', profileColors[i % profileColors.length]).attr('opacity', 0.85)
+      legG.append('text').attr('x', lx + 14).attr('y', ly - 1)
+        .attr('font-size', '10px').attr('fill', '#6b7280').attr('class', 'dark:fill-ctp-subtext0')
+        .text(`${d.label} (${d.pct.toFixed(1)}%)`)
+    })
+  }, [entries])
+
+  return (
+    <div className="relative bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg overflow-hidden">
+      <svg ref={svgRef} className="w-full" style={{ height: 320 }} />
+      {tooltip.text && (
+        <div className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-2 py-1"
+          style={{ left: tooltip.x + 10, top: tooltip.y - 10 }}
+        >{tooltip.text}</div>
+      )}
+    </div>
+  )
+}
+
+function FlamegraphChart({ entries }: { entries: ProfileEntry[] }) {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string }>({ x: 0, y: 0, text: '' })
+
+  useEffect(() => {
+    if (!entries.length || !svgRef.current) return
+    const svg = d3.select(svgRef.current)
+    svg.selectAll('*').remove()
+
+    const sorted = [...entries].sort((a, b) => b.cum_pct - a.cum_pct)
+    const top = sorted.slice(0, 30)
+
+    const groups = new Map<string, { pct: number; fns: { name: string; pct: number; flat: number }[] }>()
+    for (const e of top) {
+      const pkg = extractPkg(e.function)
+      const short = extractFnShort(e.function)
+      if (!groups.has(pkg)) groups.set(pkg, { pct: 0, fns: [] })
+      const g = groups.get(pkg)!
+      g.pct += e.flat_pct
+      g.fns.push({ name: short, pct: e.flat_pct, flat: e.flat })
+    }
+
+    const pkgColors = new Map<string, string>()
+    Array.from(groups.keys()).forEach((pkg, i) => pkgColors.set(pkg, profileColors[i % profileColors.length]))
+    const color = (pkg: string) => pkgColors.get(pkg) || '#6366f1'
+
+    const width = svgRef.current.clientWidth
+    const rowH = 24
+    const headerH = 22
+    const rows = Array.from(groups.entries())
+    const height = headerH + rows.length * rowH + rows.reduce((s, [_, g]) => s + Math.min(g.fns.length, 4) * rowH, 0) + 20
+    const pad = { left: 10, right: 10 }
+
+    svg.attr('viewBox', `0 0 ${width} ${height}`)
+
+    const g = svg.append('g').attr('transform', `translate(${pad.left},0)`)
+    const innerW = width - pad.left - pad.right
+    const totalPct = Math.max(...sorted.map((e) => e.cum_pct), 1)
+
+    // Header
+    g.append('text').attr('x', 0).attr('y', 14).attr('font-size', '11px').attr('font-weight', 'bold')
+      .attr('fill', '#374151').attr('class', 'dark:fill-ctp-text').text(`CPU Profile · Top ${top.length} functions`)
+
+    let yy = headerH
+    for (const [pkg, grp] of rows) {
+      const pkgW = Math.max((grp.pct / totalPct) * innerW, 40)
+      g.append('rect').attr('x', 0).attr('y', yy).attr('width', pkgW).attr('height', rowH - 2)
+        .attr('rx', 2).attr('fill', color(pkg)).attr('opacity', 0.7)
+      g.append('text').attr('x', 6).attr('y', yy + rowH / 2 + 1).attr('font-size', '10px').attr('font-weight', 'bold')
+        .attr('fill', '#fff').attr('dominant-baseline', 'middle').text(`${pkg} (${grp.pct.toFixed(1)}%)`)
+      yy += rowH
+
+      const fns = grp.fns.slice(0, 4)
+      for (const fn of fns) {
+        const fnW = Math.max((fn.pct / totalPct) * innerW, 20)
+        g.append('rect').attr('x', 0).attr('y', yy).attr('width', fnW).attr('height', rowH - 3)
+          .attr('rx', 2).attr('fill', color(pkg)).attr('opacity', 0.35)
+          .style('cursor', 'pointer')
+          .on('mouseover', function (event: MouseEvent) {
+            d3.select(this).attr('opacity', 0.7)
+            const rect = svgRef.current!.getBoundingClientRect()
+            setTooltip({ x: event.clientX - rect.left + 10, y: event.clientY - rect.top - 10, text: `${pkg}.${fn.name}: ${fn.pct.toFixed(1)}% (flat ${fn.flat.toFixed(2)})` })
+          })
+          .on('mousemove', function (event: MouseEvent) {
+            const rect = svgRef.current!.getBoundingClientRect()
+            setTooltip((prev) => ({ ...prev, x: event.clientX - rect.left + 10, y: event.clientY - rect.top - 10 }))
+          })
+          .on('mouseout', function () {
+            d3.select(this).attr('opacity', 0.35)
+            setTooltip({ x: 0, y: 0, text: '' })
+          })
+        g.append('text').attr('x', 6).attr('y', yy + rowH / 2 + 1).attr('font-size', '9px')
+          .attr('fill', '#374151').attr('class', 'dark:fill-ctp-subtext1').attr('dominant-baseline', 'middle')
+          .text(fn.pct > 5 ? `${fn.name} ${fn.pct.toFixed(1)}%` : '')
+        yy += rowH
+      }
+    }
+  }, [entries])
+
+  return (
+    <div className="relative bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg overflow-hidden mb-6">
+      <svg ref={svgRef} className="w-full" style={{ minHeight: 200 }} />
+      {tooltip.text && (
+        <div className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-2 py-1"
+          style={{ left: tooltip.x, top: tooltip.y }}
+        >{tooltip.text}</div>
+      )}
+    </div>
+  )
+}
+
 function ProfileTable({ title, entries, maxFlat }: { title: string; entries: ProfileEntry[] | null; maxFlat: number }) {
   if (!entries || entries.length === 0) return null
 
@@ -491,54 +776,115 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
 
   return (
     <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1400px)' }}>
-      <div className="flex items-center justify-between mb-5">
+      <div className="mb-6">
         <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text">Performance</h2>
-        {(hasBenchmarks || hasProfile) && (
-          <button
-            onClick={() => setShowPlan(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-            Generate Plan
-          </button>
-        )}
       </div>
 
-      {/* Summary cards */}
-      {hasBenchmarks && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
-            <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Benchmarks</div>
-            <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{benchmarks!.length}</div>
-          </div>
-          <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
-            <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Avg Time/Op</div>
-            <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{fmtShortNS(avgTime)}</div>
-          </div>
-          <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
-            <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Avg Allocs/Op</div>
-            <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{avgAllocs.toFixed(1)}</div>
-          </div>
-          <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
-            <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Avg Bytes/Op</div>
-            <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{fmtBytes(avgBytes)}</div>
-          </div>
+      {/* Benchmarking section */}
+      <section className="mb-8">
+        <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-200 dark:border-ctp-surface1">
+          <svg className="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          <h3 className="text-base font-bold text-gray-800 dark:text-ctp-text">Benchmarking</h3>
+          {hasBenchmarks && <span className="text-xs text-gray-400 dark:text-ctp-subtext1">({benchmarks!.length} benchmarks)</span>}
         </div>
-      )}
 
-      {/* Suggestions */}
-      {suggestions.length > 0 && (
-        <div className="mb-6">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-ctp-subtext1 uppercase tracking-wide mb-3">
-            <span className="flex items-center gap-1.5">
-              <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        {hasBenchmarks ? (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
+                <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Benchmarks</div>
+                <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{benchmarks!.length}</div>
+              </div>
+              <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
+                <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Avg Time/Op</div>
+                <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{fmtShortNS(avgTime)}</div>
+              </div>
+              <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
+                <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Avg Allocs/Op</div>
+                <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{avgAllocs.toFixed(1)}</div>
+              </div>
+              <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
+                <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">Avg Bytes/Op</div>
+                <div className="text-xl font-bold text-gray-800 dark:text-ctp-text">{fmtBytes(avgBytes)}</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <BenchmarkScatter benchmarks={benchmarks!} />
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-2">Ranking by Time/Op</h4>
+                <BenchmarkRanking benchmarks={benchmarks!} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-gray-500 dark:text-ctp-subtext0 italic">No benchmark data collected.</p>
+        )}
+      </section>
+
+      {/* Profiling section */}
+      <section className="mb-8">
+        <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-200 dark:border-ctp-surface1">
+          <svg className="w-5 h-5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <h3 className="text-base font-bold text-gray-800 dark:text-ctp-text">Profiling</h3>
+          {hasProfile && <span className="text-xs text-gray-400 dark:text-ctp-subtext1">(CPU + memory)</span>}
+        </div>
+
+        {hasProfile ? (
+          <>
+            {profile!.cpu && profile!.cpu.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-xs font-semibold text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-2">CPU Hot Paths</h4>
+                <FlamegraphChart entries={profile!.cpu} />
+              </div>
+            )}
+            {profile!.mem && profile!.mem.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-2">Memory Allocation Breakdown</h4>
+                  <AllocationDonut entries={profile!.mem} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-2">Top Functions (Table)</h4>
+                  <ProfileTable title="" entries={profile!.mem} maxFlat={allProfileMaxFlat} />
+                </div>
+              </div>
+            )}
+            {profile!.cpu && profile!.cpu.length > 0 && (
+              <ProfileTable title="CPU — Top Functions" entries={profile!.cpu} maxFlat={allProfileMaxFlat} />
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-gray-500 dark:text-ctp-subtext0 italic">No profile data collected.</p>
+        )}
+      </section>
+
+      {/* Advice section */}
+      <section>
+        <div className="flex items-center justify-between mb-4 pb-2 border-b border-gray-200 dark:border-ctp-surface1">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            <h3 className="text-base font-bold text-gray-800 dark:text-ctp-text">Advice</h3>
+          </div>
+          {(hasBenchmarks || hasProfile) && (
+            <button
+              onClick={() => setShowPlan(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
-              Suggestions ({suggestions.length})
-            </span>
-          </h3>
+              Generate Plan
+            </button>
+          )}
+        </div>
+
+        {suggestions.length > 0 ? (
           <div className="grid gap-2">
             {suggestions.map((s, i) => (
               <div
@@ -576,22 +922,10 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Benchmark scatter plot */}
-      {hasBenchmarks && (
-        <BenchmarkScatter benchmarks={benchmarks!} />
-      )}
-
-      {/* Profile section */}
-      {hasProfile && (
-        <section>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-ctp-subtext1 uppercase tracking-wide mb-3">CPU &amp; Memory Profile</h3>
-          <ProfileTable title="CPU — Top Functions" entries={profile!.cpu} maxFlat={allProfileMaxFlat} />
-          <ProfileTable title="Memory — Top Allocations" entries={profile!.mem} maxFlat={allProfileMaxFlat} />
-        </section>
-      )}
+        ) : (
+          <p className="text-sm text-gray-500 dark:text-ctp-subtext0 italic">No advice generated. Collect benchmark or profile data to see suggestions.</p>
+        )}
+      </section>
 
       {showPlan && (
         <PerformancePlan
