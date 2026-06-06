@@ -2,7 +2,290 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Theme-aware overrides for common Tailwind utility classes ─── */
+[data-theme] .bg-white { background-color: var(--theme-surface); }
+[data-theme] .bg-gray-50 { background-color: var(--theme-bg); }
+[data-theme] .text-gray-900, [data-theme] .text-gray-800, [data-theme] .text-gray-700 { color: var(--theme-text); }
+[data-theme] .text-gray-600, [data-theme] .text-gray-500, [data-theme] .text-gray-400 { color: var(--theme-muted); }
+[data-theme] .border-gray-200, [data-theme] .border-gray-100, [data-theme] .border-gray-300 { border-color: var(--theme-border); }
+
 @layer base {
+  /* ─── Catppuccin (default) ─── */
+  :root {
+    --ctp-base: #ffffff;
+    --ctp-mantle: #f8fafc;
+    --ctp-crust: #f1f5f9;
+    --ctp-surface0: #f1f5f9;
+    --ctp-surface1: #e2e8f0;
+    --ctp-surface2: #cbd5e1;
+    --ctp-overlay0: #94a3b8;
+    --ctp-overlay1: #64748b;
+    --ctp-overlay2: #475569;
+    --ctp-subtext0: #64748b;
+    --ctp-subtext1: #475569;
+    --ctp-text: #0f172a;
+    --ctp-lavender: #818cf8;
+    --ctp-blue: #3b82f6;
+    --ctp-sapphire: #06b6d4;
+    --ctp-sky: #0ea5e9;
+    --ctp-teal: #14b8a6;
+    --ctp-green: #22c55e;
+    --ctp-yellow: #eab308;
+    --ctp-peach: #f97316;
+    --ctp-maroon: #ef4444;
+    --ctp-red: #dc2626;
+    --ctp-mauve: #a855f7;
+    --ctp-pink: #ec4899;
+    --ctp-flamingo: #f43f5e;
+    --ctp-rosewater: #fda4af;
+    --theme-bg: #f8fafc;
+    --theme-surface: #ffffff;
+    --theme-border: #e2e8f0;
+    --theme-text: #0f172a;
+    --theme-muted: #64748b;
+  }
+
+  .dark {
+    --ctp-base: #1e1e2e;
+    --ctp-mantle: #181825;
+    --ctp-crust: #11111b;
+    --ctp-surface0: #313244;
+    --ctp-surface1: #45475a;
+    --ctp-surface2: #585b70;
+    --ctp-overlay0: #6c7086;
+    --ctp-overlay1: #7f849c;
+    --ctp-overlay2: #9399b2;
+    --ctp-subtext0: #a6adc8;
+    --ctp-subtext1: #bac2de;
+    --ctp-text: #cdd6f4;
+    --ctp-lavender: #b4befe;
+    --ctp-blue: #89b4fa;
+    --ctp-sapphire: #74c7ec;
+    --ctp-sky: #89dceb;
+    --ctp-teal: #94e2d5;
+    --ctp-green: #a6e3a1;
+    --ctp-yellow: #f9e2af;
+    --ctp-peach: #fab387;
+    --ctp-maroon: #eba0ac;
+    --ctp-red: #f38ba8;
+    --ctp-mauve: #cba6f7;
+    --ctp-pink: #f5c2e7;
+    --ctp-flamingo: #f2cdcd;
+    --ctp-rosewater: #f5e0dc;
+    --theme-bg: #1e1e2e;
+    --theme-surface: #181825;
+    --theme-border: #313244;
+    --theme-text: #cdd6f4;
+    --theme-muted: #6c7086;
+  }
+
+  /* ─── Nord ─── */
+  [data-theme="nord"] {
+    --ctp-base: #ffffff;
+    --ctp-mantle: #eceff4;
+    --ctp-crust: #e5e9f0;
+    --ctp-surface0: #e5e9f0;
+    --ctp-surface1: #d8dee9;
+    --ctp-surface2: #c5cddb;
+    --ctp-overlay0: #81a1c1;
+    --ctp-overlay1: #5e81ac;
+    --ctp-overlay2: #4c566a;
+    --ctp-subtext0: #4c566a;
+    --ctp-subtext1: #3b4252;
+    --ctp-text: #2e3440;
+    --ctp-lavender: #b48ead;
+    --ctp-blue: #5e81ac;
+    --ctp-sapphire: #81a1c1;
+    --ctp-sky: #88c0d0;
+    --ctp-teal: #8fbcbb;
+    --ctp-green: #a3be8c;
+    --ctp-yellow: #ebcb8b;
+    --ctp-peach: #d08770;
+    --ctp-maroon: #bf616a;
+    --ctp-red: #bf616a;
+    --ctp-mauve: #b48ead;
+    --ctp-pink: #c982b3;
+    --ctp-flamingo: #d06b7e;
+    --ctp-rosewater: #e5c9c5;
+    --theme-bg: #eceff4;
+    --theme-surface: #ffffff;
+    --theme-border: #d8dee9;
+    --theme-text: #2e3440;
+    --theme-muted: #4c566a;
+  }
+
+  [data-theme="nord"].dark {
+    --ctp-base: #2e3440;
+    --ctp-mantle: #3b4252;
+    --ctp-crust: #434c5e;
+    --ctp-surface0: #434c5e;
+    --ctp-surface1: #4c566a;
+    --ctp-surface2: #616e88;
+    --ctp-overlay0: #616e88;
+    --ctp-overlay1: #81a1c1;
+    --ctp-overlay2: #88c0d0;
+    --ctp-subtext0: #d8dee9;
+    --ctp-subtext1: #e5e9f0;
+    --ctp-text: #eceff4;
+    --ctp-lavender: #b48ead;
+    --ctp-blue: #5e81ac;
+    --ctp-sapphire: #81a1c1;
+    --ctp-sky: #88c0d0;
+    --ctp-teal: #8fbcbb;
+    --ctp-green: #a3be8c;
+    --ctp-yellow: #ebcb8b;
+    --ctp-peach: #d08770;
+    --ctp-maroon: #bf616a;
+    --ctp-red: #bf616a;
+    --ctp-mauve: #b48ead;
+    --ctp-pink: #c982b3;
+    --ctp-flamingo: #d06b7e;
+    --ctp-rosewater: #e5c9c5;
+    --theme-bg: #2e3440;
+    --theme-surface: #3b4252;
+    --theme-border: #4c566a;
+    --theme-text: #eceff4;
+    --theme-muted: #616e88;
+  }
+
+  /* ─── Dracula ─── */
+  [data-theme="dracula"] {
+    --ctp-base: #ffffff;
+    --ctp-mantle: #f8f8f2;
+    --ctp-crust: #f0efe8;
+    --ctp-surface0: #f0efe8;
+    --ctp-surface1: #e0dfd5;
+    --ctp-surface2: #c5c4b8;
+    --ctp-overlay0: #9a9ab0;
+    --ctp-overlay1: #7a7a9a;
+    --ctp-overlay2: #6272a4;
+    --ctp-subtext0: #6272a4;
+    --ctp-subtext1: #44475a;
+    --ctp-text: #282a36;
+    --ctp-lavender: #bd93f9;
+    --ctp-blue: #6272a4;
+    --ctp-sapphire: #6c7fbd;
+    --ctp-sky: #7bb3f0;
+    --ctp-teal: #50fa7b;
+    --ctp-green: #50fa7b;
+    --ctp-yellow: #f1fa8c;
+    --ctp-peach: #ffb86c;
+    --ctp-maroon: #ff5555;
+    --ctp-red: #ff5555;
+    --ctp-mauve: #bd93f9;
+    --ctp-pink: #ff79c6;
+    --ctp-flamingo: #ff79c6;
+    --ctp-rosewater: #f1c8c8;
+    --theme-bg: #f8f8f2;
+    --theme-surface: #ffffff;
+    --theme-border: #e0dfd5;
+    --theme-text: #282a36;
+    --theme-muted: #6272a4;
+  }
+
+  [data-theme="dracula"].dark {
+    --ctp-base: #282a36;
+    --ctp-mantle: #21222c;
+    --ctp-crust: #191a21;
+    --ctp-surface0: #343746;
+    --ctp-surface1: #3d4051;
+    --ctp-surface2: #44475a;
+    --ctp-overlay0: #56596e;
+    --ctp-overlay1: #6272a4;
+    --ctp-overlay2: #6c7fbd;
+    --ctp-subtext0: #9ea7c9;
+    --ctp-subtext1: #b8c0e0;
+    --ctp-text: #f8f8f2;
+    --ctp-lavender: #bd93f9;
+    --ctp-blue: #6272a4;
+    --ctp-sapphire: #6c7fbd;
+    --ctp-sky: #7bb3f0;
+    --ctp-teal: #50fa7b;
+    --ctp-green: #50fa7b;
+    --ctp-yellow: #f1fa8c;
+    --ctp-peach: #ffb86c;
+    --ctp-maroon: #ff5555;
+    --ctp-red: #ff5555;
+    --ctp-mauve: #bd93f9;
+    --ctp-pink: #ff79c6;
+    --ctp-flamingo: #ff79c6;
+    --ctp-rosewater: #f1c8c8;
+    --theme-bg: #282a36;
+    --theme-surface: #21222c;
+    --theme-border: #3d4051;
+    --theme-text: #f8f8f2;
+    --theme-muted: #6272a4;
+  }
+
+  /* ─── Gruvbox ─── */
+  [data-theme="gruvbox"] {
+    --ctp-base: #fbf1c7;
+    --ctp-mantle: #f2e5bc;
+    --ctp-crust: #ebdbb2;
+    --ctp-surface0: #ebdbb2;
+    --ctp-surface1: #d5c4a1;
+    --ctp-surface2: #bdae93;
+    --ctp-overlay0: #a89984;
+    --ctp-overlay1: #928374;
+    --ctp-overlay2: #7c6f64;
+    --ctp-subtext0: #7c6f64;
+    --ctp-subtext1: #665c54;
+    --ctp-text: #3c3836;
+    --ctp-lavender: #d3869b;
+    --ctp-blue: #458588;
+    --ctp-sapphire: #83a598;
+    --ctp-sky: #8ec07c;
+    --ctp-teal: #8ec07c;
+    --ctp-green: #98971a;
+    --ctp-yellow: #d79921;
+    --ctp-peach: #d65d0e;
+    --ctp-maroon: #b16286;
+    --ctp-red: #cc241d;
+    --ctp-mauve: #b16286;
+    --ctp-pink: #d3869b;
+    --ctp-flamingo: #d5a4a4;
+    --ctp-rosewater: #f1d0c8;
+    --theme-bg: #fbf1c7;
+    --theme-surface: #f2e5bc;
+    --theme-border: #d5c4a1;
+    --theme-text: #3c3836;
+    --theme-muted: #7c6f64;
+  }
+
+  [data-theme="gruvbox"].dark {
+    --ctp-base: #282828;
+    --ctp-mantle: #1d2021;
+    --ctp-crust: #141617;
+    --ctp-surface0: #32302f;
+    --ctp-surface1: #3c3836;
+    --ctp-surface2: #504945;
+    --ctp-overlay0: #504945;
+    --ctp-overlay1: #665c54;
+    --ctp-overlay2: #7c6f64;
+    --ctp-subtext0: #a89984;
+    --ctp-subtext1: #bdae93;
+    --ctp-text: #ebdbb2;
+    --ctp-lavender: #d3869b;
+    --ctp-blue: #458588;
+    --ctp-sapphire: #83a598;
+    --ctp-sky: #8ec07c;
+    --ctp-teal: #8ec07c;
+    --ctp-green: #98971a;
+    --ctp-yellow: #d79921;
+    --ctp-peach: #d65d0e;
+    --ctp-maroon: #b16286;
+    --ctp-red: #cc241d;
+    --ctp-mauve: #b16286;
+    --ctp-pink: #d3869b;
+    --ctp-flamingo: #d5a4a4;
+    --ctp-rosewater: #f1d0c8;
+    --theme-bg: #282828;
+    --theme-surface: #1d2021;
+    --theme-border: #3c3836;
+    --theme-text: #ebdbb2;
+    --theme-muted: #665c54;
+  }
+
   html {
     font-size: 16px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -15,7 +298,8 @@
   }
 
   body {
-    @apply bg-gray-50 text-gray-900 dark:bg-ctp-base dark:text-ctp-text;
+    background-color: var(--theme-bg);
+    color: var(--theme-text);
   }
 
   ::selection {
@@ -25,13 +309,25 @@
 
 @layer components {
   .card {
-    @apply bg-white border border-gray-200 rounded dark:bg-ctp-surface0 dark:border-ctp-surface1;
+    background-color: var(--theme-surface);
+    border-color: var(--theme-border);
   }
 
   .input {
-    @apply px-3 py-1.5 text-sm border border-gray-300 rounded bg-white text-gray-900
-           placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500
-           dark:bg-ctp-surface0 dark:border-ctp-surface1 dark:text-ctp-text dark:placeholder:text-ctp-overlay0;
+    @apply px-3 py-1.5 text-sm border rounded;
+    border-color: var(--theme-border);
+    background-color: var(--theme-surface);
+    color: var(--theme-text);
+  }
+
+  .input::placeholder {
+    color: var(--theme-muted);
+  }
+
+  .input:focus {
+    outline: none;
+    --tw-ring-color: var(--ctp-blue);
+    --tw-border-color: var(--ctp-blue);
   }
 
   .sq-metric {
@@ -43,7 +339,12 @@
   }
 
   .btn-primary {
-    @apply px-4 py-2 text-sm font-medium bg-green-600 text-white rounded hover:bg-green-700 transition-colors dark:bg-ctp-green dark:text-ctp-base dark:hover:bg-ctp-teal;
+    @apply px-4 py-2 text-sm font-medium text-white rounded transition-colors;
+    background-color: var(--ctp-green);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--ctp-teal);
   }
 
   .btn-disabled {

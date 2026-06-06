@@ -5,6 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>gopolice</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👮</text></svg>" />
+    <script>
+      (function(){
+        var old = localStorage.getItem('theme');
+        var scheme = localStorage.getItem('scheme');
+        var dark;
+        if (old === 'dark' || old === 'light') {
+          dark = old === 'dark';
+          scheme = scheme || 'catppuccin';
+          localStorage.setItem('scheme', scheme);
+          localStorage.setItem('dark', String(dark));
+          localStorage.removeItem('theme');
+        } else {
+          scheme = scheme || 'catppuccin';
+          dark = localStorage.getItem('dark') === 'true' ||
+            (localStorage.getItem('dark') === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        }
+        document.documentElement.setAttribute('data-theme', scheme);
+        document.documentElement.classList.toggle('dark', dark);
+      })();
+    </script>
   </head>
   <body class="bg-gray-50 text-gray-900">
     <div id="root"></div>
