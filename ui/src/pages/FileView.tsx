@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react'
 import { getSnippet, Issue, Snippet } from '../api/client'
+import { severityIcon, severityTextClass } from '../lib/severity'
 
 interface Props {
   filePath: string
   issues: Issue[]
   onBack: () => void
 }
-
-const sevIcon: Record<string, string> = { error: '●', warning: '◆', info: '○' }
-const sevColor: Record<string, string> = { error: 'text-red-500', warning: 'text-yellow-500', info: 'text-blue-500' }
 
 export default function FileView({ filePath, issues, onBack }: Props) {
   const [snippets, setSnippets] = useState<Map<number, Snippet>>(new Map())
@@ -30,7 +28,7 @@ export default function FileView({ filePath, issues, onBack }: Props) {
   }, [filePath, lineNumbers.join(',')])
 
   return (
-    <div className="max-w-5xl mx-auto p-8">
+    <div className="max-w-4xl mx-auto p-8">
       <button onClick={onBack} className="text-sm text-blue-600 dark:text-ctp-blue hover:underline mb-4">&larr; Back</button>
 
       <div className="flex items-baseline gap-3 mb-5">
@@ -60,7 +58,7 @@ export default function FileView({ filePath, issues, onBack }: Props) {
 
                 {lineIssues.map((issue) => (
                   <div key={issue.id} className="px-5 py-2 flex items-start gap-3 border-b border-gray-100 dark:border-ctp-surface2 last:border-0">
-                    <span className={`text-base shrink-0 pt-0.5 ${sevColor[issue.severity]}`}>{sevIcon[issue.severity]}</span>
+                    <span className={`text-base shrink-0 pt-0.5 ${severityTextClass(issue.severity)}`}>{severityIcon(issue.severity)}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-xs font-medium uppercase text-gray-400 dark:text-ctp-subtext1">{issue.severity}</span>

@@ -13,6 +13,7 @@ import GitStats from './pages/GitStats'
 import ConfigPage from './pages/Config'
 import History from './pages/History'
 import Layout from './components/Layout'
+import Spinner from './components/Spinner'
 import { getResults, subscribeStatus, type ProgressEvent, type ScanResult, triggerScan } from './api/client'
 
 type Page = 'dashboard' | 'issues' | 'issue' | 'file' | 'tests' | 'testdetail' | 'performance' | 'deadcode' | 'depgraph' | 'history' | 'security' | 'git' | 'config'
@@ -91,10 +92,10 @@ export default function App() {
   }
 
   return (
-    <Layout page={page} onNavigate={navigate} scanning={scanning} onScan={handleScan} historicalLabel={historicalLabel} onClearHistorical={handleClearHistorical}>
+    <Layout page={page} onNavigate={navigate} scanning={scanning} onScan={handleScan} historicalLabel={historicalLabel} onClearHistorical={handleClearHistorical} projectName={result?.project_name} scanTime={result?.scan_time}>
       {loading ? (
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
+          <Spinner />
         </div>
       ) : page === 'dashboard' ? (
         <Dashboard result={result} scanEvents={scanEvents} scanning={scanning} readingResults={readingResults} onScan={handleScan} />
@@ -116,13 +117,13 @@ export default function App() {
       ) : page === 'performance' ? (
         <Performance benchmarks={result?.benchmarks ?? null} profile={result?.profile ?? null} onScan={handleScan} scanning={scanning} projectName={result?.project_name} />
       ) : page === 'deadcode' ? (
-        <DeadCode issues={result?.issues ?? []} onSelectIssue={(id) => navigate('issue', id)} onSelectFile={(f) => navigate('file', f)} />
+        <DeadCode issues={result?.issues ?? []} onSelectIssue={(id) => navigate('issue', id)} onSelectFile={(f) => navigate('file', f)} onScan={handleScan} scanning={scanning} />
       ) : page === 'depgraph' ? (
         <DepGraph depGraph={result?.dep_graph ?? null} onScan={handleScan} scanning={scanning} />
       ) : page === 'security' ? (
-        <Security issues={result?.issues ?? []} onSelectIssue={(id) => navigate('issue', id)} />
+        <Security issues={result?.issues ?? []} onSelectIssue={(id) => navigate('issue', id)} onScan={handleScan} scanning={scanning} />
       ) : page === 'git' ? (
-        <GitStats gitInfo={result?.git_info ?? null} />
+        <GitStats gitInfo={result?.git_info ?? null} onScan={handleScan} scanning={scanning} />
       ) : page === 'history' ? (
         <History onLoadResult={handleLoadResult} />
       ) : page === 'config' ? (

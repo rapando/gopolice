@@ -1,4 +1,5 @@
 import { TestResult, Test } from '../api/client'
+import EmptyState from '../components/EmptyState'
 
 interface Props {
   testResult: TestResult | null
@@ -15,30 +16,22 @@ const sortTests = (tests: Test[]) =>
 
 export default function Tests({ testResult, onScan, scanning, onSelectTest }: Props) {
   return (
-    <div className="max-w-5xl mx-auto p-8">
+    <div className="max-w-6xl mx-auto p-8">
       <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text mb-5">Tests</h2>
 
       {!testResult ? (
-        <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded p-10 text-center">
-          <p className="text-gray-500 dark:text-ctp-subtext0 mb-4">No test results available.</p>
-          {onScan && (
-            <button
-              onClick={onScan}
-              disabled={scanning}
-              className="px-4 py-2 text-sm font-medium bg-green-600 text-white dark:bg-ctp-green dark:text-ctp-base rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
-            >
-              {scanning ? 'Scanning...' : 'Run Scan'}
-            </button>
-          )}
-        </div>
+        <EmptyState message="No test results available." onScan={onScan} scanning={scanning} />
       ) : (
         <>
           {!testResult.total ? (
-            <div className="bg-white border border-gray-200 rounded p-10 text-center">
-              <p className="text-red-500 dark:text-ctp-red">Test result data is incomplete.</p>
-              <pre className="mt-2 text-xs text-left bg-gray-100 dark:bg-ctp-surface0 p-3 rounded overflow-auto">
-                {JSON.stringify(testResult, null, 2)}
-              </pre>
+            <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded p-10 text-center">
+              <p className="text-gray-500 dark:text-ctp-subtext0 mb-3">Test result data is incomplete — the scan may not have produced full output for this run.</p>
+              <details className="text-left max-w-lg mx-auto">
+                <summary className="text-xs text-gray-400 dark:text-ctp-subtext1 cursor-pointer select-none hover:text-gray-600 dark:hover:text-ctp-subtext0">Technical details</summary>
+                <pre className="mt-2 text-xs text-left bg-gray-100 dark:bg-ctp-surface1 p-3 rounded overflow-auto">
+                  {JSON.stringify(testResult, null, 2)}
+                </pre>
+              </details>
             </div>
           ) : (
             <>

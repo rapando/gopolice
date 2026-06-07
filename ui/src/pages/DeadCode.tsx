@@ -1,15 +1,16 @@
 import { Issue } from '../api/client'
+import { severityIcon, severityTextClass } from '../lib/severity'
+import EmptyState from '../components/EmptyState'
 
 interface Props {
   issues: Issue[]
   onSelectIssue?: (id: string) => void
   onSelectFile?: (file: string) => void
+  onScan?: () => void
+  scanning?: boolean
 }
 
-const sevIcon: Record<string, string> = { error: '●', warning: '◆', info: '○' }
-const sevColor: Record<string, string> = { error: 'text-red-500', warning: 'text-yellow-500', info: 'text-blue-500' }
-
-export default function DeadCode({ issues, onSelectIssue, onSelectFile }: Props) {
+export default function DeadCode({ issues, onSelectIssue, onSelectFile, onScan, scanning }: Props) {
   const deadIssues = issues.filter((i) => i.category === 'deadcode')
 
   return (
@@ -19,9 +20,7 @@ export default function DeadCode({ issues, onSelectIssue, onSelectFile }: Props)
       </h2>
 
       {deadIssues.length === 0 ? (
-        <div className="card p-8 text-center">
-          <p className="text-gray-500 dark:text-ctp-subtext0">No dead code issues found.</p>
-        </div>
+        <EmptyState message="No dead code issues found." onScan={onScan} scanning={scanning} />
       ) : (
         <div className="card overflow-hidden">
           <table className="w-full text-sm">
@@ -38,7 +37,7 @@ export default function DeadCode({ issues, onSelectIssue, onSelectFile }: Props)
               {deadIssues.map((issue) => (
                 <tr key={issue.id} className="hover:bg-gray-50 dark:hover:bg-ctp-surface0 transition-colors group">
                   <td className="px-5 py-3">
-                    <span className={`${sevColor[issue.severity] || 'text-gray-400'}`}>{sevIcon[issue.severity] || '○'}</span>
+                    <span className={severityTextClass(issue.severity)}>{severityIcon(issue.severity)}</span>
                   </td>
                   <td className="px-5 py-3 font-mono text-xs text-gray-500 dark:text-ctp-subtext1">{issue.rule}</td>
                   <td className="px-5 py-3 text-gray-700 dark:text-ctp-subtext1">

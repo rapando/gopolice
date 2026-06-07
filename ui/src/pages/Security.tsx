@@ -1,14 +1,15 @@
 import { Issue } from '../api/client'
+import { severityIcon, severityTextClass } from '../lib/severity'
+import EmptyState from '../components/EmptyState'
 
 interface Props {
   issues: Issue[]
   onSelectIssue?: (id: string) => void
+  onScan?: () => void
+  scanning?: boolean
 }
 
-const sevIcon: Record<string, string> = { error: '●', warning: '◆', info: '○' }
-const sevColor: Record<string, string> = { error: 'text-red-500', warning: 'text-yellow-500', info: 'text-blue-500' }
-
-export default function Security({ issues, onSelectIssue }: Props) {
+export default function Security({ issues, onSelectIssue, onScan, scanning }: Props) {
   const securityIssues = issues.filter((i) => i.category === 'security')
 
   return (
@@ -18,9 +19,7 @@ export default function Security({ issues, onSelectIssue }: Props) {
       </h2>
 
       {securityIssues.length === 0 ? (
-        <div className="card p-8 text-center">
-          <p className="text-gray-500 dark:text-ctp-subtext0">No security issues found.</p>
-        </div>
+        <EmptyState message="No security issues found." onScan={onScan} scanning={scanning} />
       ) : (
         <div className="card overflow-hidden">
           <table className="w-full text-sm">
@@ -39,7 +38,7 @@ export default function Security({ issues, onSelectIssue }: Props) {
                 <tr key={issue.id} onClick={() => onSelectIssue?.(issue.id)} className="hover:bg-gray-50 dark:hover:bg-ctp-surface0 transition-colors cursor-pointer">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2">
-                      <span className={`text-base ${sevColor[issue.severity]}`}>{sevIcon[issue.severity]}</span>
+                      <span className={`text-base ${severityTextClass(issue.severity)}`}>{severityIcon(issue.severity)}</span>
                       <span className="text-xs font-medium capitalize">{issue.severity}</span>
                     </div>
                   </td>

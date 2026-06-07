@@ -1,5 +1,7 @@
 import { useRef, useEffect, useState, useMemo } from 'react'
 import { DepGraph as DepGraphData } from '../api/client'
+import { useThemeColors } from '../hooks/useThemeColors'
+import EmptyState from '../components/EmptyState'
 import * as d3 from 'd3'
 
 interface Props {
@@ -26,15 +28,19 @@ function extractShortName(full: string): string {
 }
 
 export default function DepGraph({ depGraph, onScan, scanning }: Props) {
+  const colors = useThemeColors()
   const svgRef = useRef<SVGSVGElement>(null)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [showPanel, setShowPanel] = useState(false)
+  const [matchCount, setMatchCount] = useState<number | null>(null)
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null)
   const nodeGroupRef = useRef<d3.Selection<SVGGElement, GraphNode, SVGGElement, unknown> | null>(null)
   const linkRef = useRef<d3.Selection<SVGLineElement, GraphLink, SVGGElement, unknown> | null>(null)
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const dimsRef = useRef({ width: 0, height: 0 })
 
   const edges = depGraph?.edges ?? []
   const allNodes = useMemo(() => {
@@ -81,6 +87,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
 
     const width = svgRef.current.clientWidth
     const height = Math.max(700, window.innerHeight - 200)
+    dimsRef.current = { width, height }
 
     svg.attr('viewBox', `0 0 ${width} ${height}`)
 
@@ -106,11 +113,17 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
     try {
       const container = svg.append('g').attr('class', 'graph-container')
 
+      // Node radius encodes "how relied-upon" (number of dependents) so the
+      // most depended-on packages stand out at a glance in large graphs.
+      const maxDependents = Math.max(1, ...nodes.map((n) => incoming.get(n.id)?.length ?? 0))
+      const radiusScale = d3.scaleSqrt().domain([0, maxDependents]).range([6, 20])
+      const nodeRadius = (d: GraphNode) => Math.max(d.isRoot ? 9 : 6, radiusScale(incoming.get(d.id)?.length ?? 0))
+
       const simulation = d3.forceSimulation<GraphNode>(nodes)
         .force('link', d3.forceLink<GraphNode, GraphLink>(links).id((d) => d.id).distance(130))
         .force('charge', d3.forceManyBody().strength(-500))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(35))
+        .force('collision', d3.forceCollide<GraphNode>().radius((d) => nodeRadius(d) + 18))
 
       simulationRef.current = simulation
 
@@ -125,13 +138,13 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
         .attr('orient', 'auto')
         .append('path')
         .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', '#94a3b8')
+        .attr('fill', colors.muted)
 
       const link = container.append('g')
         .selectAll<SVGLineElement, GraphLink>('line')
         .data(links)
         .join('line')
-        .attr('stroke', '#94a3b8')
+        .attr('stroke', colors.muted)
         .attr('stroke-width', 1.5)
         .attr('stroke-opacity', 0.6)
         .attr('marker-end', 'url(#arrowhead)')
@@ -147,18 +160,17 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
       nodeGroupRef.current = group
 
       group.append('circle')
-        .attr('r', (d) => d.isRoot ? 11 : 8)
-        .attr('fill', (d) => d.isRoot ? '#f59e0b' : '#6366f1')
-        .attr('stroke', '#fff')
+        .attr('r', nodeRadius)
+        .attr('fill', (d) => d.isRoot ? colors.peach : colors.lavender)
+        .attr('stroke', colors.surface)
         .attr('stroke-width', 2.5)
 
       group.append('text')
         .text((d) => extractShortName(d.id))
         .attr('text-anchor', 'middle')
-        .attr('dy', (d) => d.isRoot ? -18 : -14)
+        .attr('dy', (d) => -nodeRadius(d) - 6)
         .attr('font-size', '11px')
-        .attr('fill', '#475569')
-        .attr('class', 'dark:fill-ctp-subtext1')
+        .attr('fill', colors.muted)
         .style('pointer-events', 'none')
 
       group.on('mouseover', (event: MouseEvent, d) => {
@@ -185,6 +197,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
           container.attr('transform', event.transform)
         })
 
+      zoomRef.current = zoom
       svg.call(zoom)
 
       simulation.on('tick', () => {
@@ -206,8 +219,9 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
       simulationRef.current = null
       nodeGroupRef.current = null
       linkRef.current = null
+      zoomRef.current = null
     }
-  }, [depGraph])
+  }, [depGraph, colors, incoming])
 
   useEffect(() => {
     if (!nodeGroupRef.current || !linkRef.current) return
@@ -228,7 +242,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
       circle
         .attr('opacity', isMatching ? 1 : 0.15)
         .attr('stroke-width', selected === d.id ? 3.5 : 2.5)
-        .attr('stroke', selected === d.id ? '#f59e0b' : '#fff')
+        .attr('stroke', selected === d.id ? colors.peach : colors.surface)
 
       text.attr('opacity', isMatching ? 1 : 0.15)
     })
@@ -243,7 +257,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
 
       if (!selected) {
         line.attr('stroke-opacity', 0.6)
-          .attr('stroke', '#94a3b8')
+          .attr('stroke', colors.muted)
           .attr('stroke-width', 1.5)
         return
       }
@@ -252,27 +266,46 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
       const isToSelected = tgt === selected && selectedIn.has(src)
 
       if (isFromSelected) {
-        line.attr('stroke', '#22c55e')
+        line.attr('stroke', colors.green)
           .attr('stroke-opacity', 1)
           .attr('stroke-width', 3)
       } else if (isToSelected) {
-        line.attr('stroke', '#3b82f6')
+        line.attr('stroke', colors.blue)
           .attr('stroke-opacity', 1)
           .attr('stroke-width', 3)
       } else {
         line.attr('stroke-opacity', 0.06)
-          .attr('stroke', '#94a3b8')
+          .attr('stroke', colors.muted)
           .attr('stroke-width', 0.5)
       }
     })
-  }, [selected, outgoing, incoming])
+  }, [selected, outgoing, incoming, colors])
+
+  // The info panel shrinks the graph's rendered width — recompute the
+  // viewBox and recenter the simulation so the layout doesn't end up
+  // visually off-center after the panel opens or closes.
+  useEffect(() => {
+    if (!svgRef.current || !simulationRef.current) return
+    const id = requestAnimationFrame(() => {
+      if (!svgRef.current || !simulationRef.current) return
+      const width = svgRef.current.clientWidth
+      const height = dimsRef.current.height
+      dimsRef.current = { width, height }
+      d3.select(svgRef.current).attr('viewBox', `0 0 ${width} ${height}`)
+      simulationRef.current.force('center', d3.forceCenter(width / 2, height / 2))
+      simulationRef.current.alpha(0.3).restart()
+    })
+    return () => cancelAnimationFrame(id)
+  }, [showPanel])
 
   useEffect(() => {
     if (!nodeGroupRef.current || !linkRef.current) return
     const q = searchQuery.toLowerCase()
+    const matched: GraphNode[] = []
 
     nodeGroupRef.current.each(function (d) {
       const matches = !q || d.id.toLowerCase().includes(q) || extractShortName(d.id).toLowerCase().includes(q)
+      if (q && matches) matched.push(d)
       d3.select(this).select('circle').attr('opacity', matches ? 1 : 0.08)
       d3.select(this).select('text').attr('opacity', matches ? 1 : 0.08)
     })
@@ -284,6 +317,27 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
         extractShortName(src).toLowerCase().includes(q) || extractShortName(tgt).toLowerCase().includes(q)
       d3.select(this).attr('stroke-opacity', matches ? 0.3 : 0.02)
     })
+
+    setMatchCount(q ? matched.length : null)
+
+    // Pan/zoom to fit the matching nodes so a match off-screen in a large
+    // graph doesn't go unnoticed.
+    if (q && matched.length > 0 && zoomRef.current && svgRef.current) {
+      const xs = matched.map((d) => d.x ?? 0)
+      const ys = matched.map((d) => d.y ?? 0)
+      const minX = Math.min(...xs), maxX = Math.max(...xs)
+      const minY = Math.min(...ys), maxY = Math.max(...ys)
+      const { width, height } = dimsRef.current
+      const boxW = Math.max(maxX - minX, 1)
+      const boxH = Math.max(maxY - minY, 1)
+      const cx = (minX + maxX) / 2
+      const cy = (minY + maxY) / 2
+      const scale = Math.min(2.5, Math.max(0.4, 0.7 / Math.max(boxW / width, boxH / height)))
+      const transform = d3.zoomIdentity.translate(width / 2, height / 2).scale(scale).translate(-cx, -cy)
+      d3.select(svgRef.current).transition().duration(450).call(zoomRef.current.transform, transform)
+    } else if (!q && zoomRef.current && svgRef.current) {
+      d3.select(svgRef.current).transition().duration(450).call(zoomRef.current.transform, d3.zoomIdentity)
+    }
   }, [searchQuery])
 
   const handleClosePanel = () => {
@@ -296,18 +350,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
       <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text mb-4">Dependency Graph</h2>
 
       {!depGraph || !depGraph.edges || depGraph.edges.length === 0 ? (
-        <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded p-10 text-center">
-          <p className="text-gray-500 dark:text-ctp-subtext0 mb-4">No dependency graph available.</p>
-          {onScan && (
-            <button
-              onClick={onScan}
-              disabled={scanning}
-              className="px-4 py-2 text-sm font-medium bg-green-600 text-white dark:bg-ctp-green dark:text-ctp-base rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
-            >
-              {scanning ? 'Scanning...' : 'Run Scan'}
-            </button>
-          )}
-        </div>
+        <EmptyState message="No dependency graph available." onScan={onScan} scanning={scanning} />
       ) : (
         <div className="flex gap-4">
           {/* Graph area */}
@@ -338,6 +381,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
                   {searchQuery && (
                     <button
                       onClick={() => setSearchQuery('')}
+                      aria-label="Clear search"
                       className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-ctp-subtext0"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -348,19 +392,22 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
                 </div>
                 <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-ctp-subtext0 shrink-0">
                   <span className="flex items-center gap-1">
-                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400" /> Root
+                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.peach }} /> Root
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-indigo-400" /> Dep
+                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.lavender }} /> Dep
                   </span>
+                  <span className="text-gray-400 dark:text-ctp-subtext1">&middot; size = dependents</span>
                   {!searchQuery && (
                     <span className="text-gray-400 dark:text-ctp-subtext1 ml-1">
                       {edges.length} edges &middot; {allNodes.length} nodes
                     </span>
                   )}
                   {searchQuery && (
-                    <span className="text-gray-400 dark:text-ctp-subtext1 ml-1">
-                      filtered
+                    <span className="text-gray-400 dark:text-ctp-subtext1 ml-1" aria-live="polite">
+                      {matchCount === 0
+                        ? 'No matches'
+                        : `${matchCount} of ${allNodes.length} match${matchCount === 1 ? '' : 'es'}`}
                     </span>
                   )}
                 </div>
@@ -370,9 +417,12 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
 
             {tooltip && (
               <div
+                role="tooltip"
                 className="absolute z-10 px-3 py-1.5 text-xs bg-gray-900 text-white rounded shadow-lg pointer-events-none max-w-sm break-all"
                 style={{ left: tooltip.x, top: tooltip.y }}
-              />
+              >
+                {tooltip.text}
+              </div>
             )}
           </div>
 
@@ -385,6 +435,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
                 </h3>
                 <button
                   onClick={handleClosePanel}
+                  aria-label="Close panel"
                   className="text-gray-400 hover:text-gray-600 dark:hover:text-ctp-subtext0 shrink-0 ml-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

@@ -1,28 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getGlobalConfig, updateGlobalConfig } from '../api/client'
-
-const themes = [
-  { id: 'catppuccin', label: 'Catppuccin' },
-  { id: 'nord', label: 'Nord' },
-  { id: 'dracula', label: 'Dracula' },
-  { id: 'gruvbox', label: 'Gruvbox' },
-]
-
-function getScheme(): string {
-  return localStorage.getItem('scheme') || 'catppuccin'
-}
-
-function getDark(): boolean {
-  return localStorage.getItem('dark') === 'true' ||
-    (localStorage.getItem('dark') === null && window.matchMedia('(prefers-color-scheme: dark)').matches)
-}
-
-function applyScheme(scheme: string, dark: boolean) {
-  document.documentElement.setAttribute('data-theme', scheme)
-  document.documentElement.classList.toggle('dark', dark)
-  localStorage.setItem('scheme', scheme)
-  localStorage.setItem('dark', String(dark))
-}
+import { themes, getScheme, getDark, applyScheme } from '../lib/theme'
 
 export default function ConfigPage() {
   const [form, setForm] = useState<any>(null)
@@ -97,6 +75,7 @@ export default function ConfigPage() {
                 <button
                   key={t.id}
                   onClick={() => handleSchemeChange(t.id)}
+                  aria-pressed={scheme === t.id}
                   className={`px-4 py-2 text-sm rounded border transition-colors ${
                     scheme === t.id
                       ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-ctp-lavender dark:bg-ctp-base dark:text-ctp-lavender'
@@ -116,6 +95,7 @@ export default function ConfigPage() {
             <p className="text-xs text-gray-400 dark:text-ctp-subtext1 mb-2">Toggle between light and dark mode</p>
             <button
               onClick={toggleDark}
+              aria-pressed={dark}
               className="flex items-center gap-2 px-4 py-2 text-sm rounded border border-gray-300 dark:border-ctp-surface1 hover:bg-gray-50 dark:hover:bg-ctp-surface0 transition-colors text-gray-700 dark:text-ctp-subtext0"
             >
               {dark ? (

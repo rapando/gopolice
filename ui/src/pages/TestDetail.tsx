@@ -33,7 +33,7 @@ export default function TestDetail({ testResult, issues, pkgName, testName, onBa
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-8">
+    <div className="max-w-4xl mx-auto p-8">
       <button onClick={onBack} className="text-sm text-blue-600 dark:text-ctp-blue hover:underline mb-5">&larr; Back to tests</button>
 
       <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded overflow-hidden mb-6">

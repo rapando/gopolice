@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { HistoryEntry, DiffResult, ScanResult, getHistoryList, getHistoryEntry, getHistoryDiff, deleteHistoryEntry, severityBadge, categoryColor, durationStr } from '../api/client'
+import { HistoryEntry, DiffResult, ScanResult, getHistoryList, getHistoryEntry, getHistoryDiff, deleteHistoryEntry, durationStr } from '../api/client'
+import { severityBadgeClass, categoryTextClass } from '../lib/severity'
+import Spinner from '../components/Spinner'
 
 interface Props {
   onLoadResult?: (result: ScanResult, label: string) => void
@@ -81,20 +83,20 @@ export default function History({ onLoadResult }: Props) {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto p-8">
+      <div className="max-w-6xl mx-auto p-8">
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
+          <Spinner />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-8">
+    <div className="max-w-6xl mx-auto p-8">
       <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text mb-5">Scan History</h2>
 
       {entries.length === 0 ? (
-        <div className="card p-8 text-center">
+        <div className="card p-10 text-center">
           <p className="text-gray-500 dark:text-ctp-subtext0">No scan history yet. Run <code className="text-xs bg-gray-100 dark:bg-ctp-surface0 px-1 rounded">gopolice scan</code> to create one.</p>
         </div>
       ) : (
@@ -119,6 +121,7 @@ export default function History({ onLoadResult }: Props) {
           </div>
 
           {/* Pagination */}
+          {totalPages > 1 && (
           <div className="flex items-center justify-between mb-3 text-xs text-gray-500 dark:text-ctp-subtext0">
             <span>{entries.length} scan{entries.length !== 1 ? 's' : ''}</span>
             <div className="flex items-center gap-1">
@@ -161,6 +164,7 @@ export default function History({ onLoadResult }: Props) {
               >&#187;</button>
             </div>
           </div>
+          )}
 
           <div className="card mb-5 overflow-hidden">
             <div className="flex items-center gap-3 px-5 py-2.5 bg-gray-50 border-b border-gray-100 text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium dark:bg-ctp-surface0 dark:border-ctp-surface1">
@@ -215,6 +219,7 @@ export default function History({ onLoadResult }: Props) {
                         onClick={(ev) => { ev.stopPropagation(); deleteEntry(e.id) }}
                         className="text-xs text-gray-400 hover:text-red-500 dark:text-ctp-subtext0 dark:hover:text-ctp-red shrink-0 w-6 text-right"
                         title="Delete"
+                        aria-label="Delete scan history entry"
                       >
                         ✕
                       </button>
@@ -282,7 +287,7 @@ export default function History({ onLoadResult }: Props) {
                     <p className="text-xs font-medium text-red-600 dark:text-ctp-red mb-2">New Issues ({diff.new.length})</p>
                     {diff.new.map((issue) => (
                       <p key={issue.id} className="text-xs text-gray-700 dark:text-ctp-subtext0 font-mono mb-1">
-                        <span className={`inline-block w-14 text-center rounded text-[10px] font-medium ${severityBadge(issue.severity)}`}>{issue.severity}</span>
+                        <span className={`inline-block w-14 text-center rounded text-[10px] font-medium ${severityBadgeClass(issue.severity)}`}>{issue.severity}</span>
                         {' '}{issue.file}:{issue.line} — {issue.message}
                       </p>
                     ))}
@@ -293,7 +298,7 @@ export default function History({ onLoadResult }: Props) {
                     <p className="text-xs font-medium text-green-600 dark:text-ctp-green mb-2">Resolved Issues ({diff.resolved.length})</p>
                     {diff.resolved.map((issue) => (
                       <p key={issue.id} className="text-xs text-gray-500 dark:text-ctp-subtext0 font-mono line-through mb-1">
-                        <span className={`inline-block w-14 text-center rounded text-[10px] font-medium ${severityBadge(issue.severity)}`}>{issue.severity}</span>
+                        <span className={`inline-block w-14 text-center rounded text-[10px] font-medium ${severityBadgeClass(issue.severity)}`}>{issue.severity}</span>
                         {' '}{issue.file}:{issue.line} — {issue.message}
                       </p>
                     ))}
@@ -354,6 +359,7 @@ export default function History({ onLoadResult }: Props) {
               <div className="card">
                 <button
                   onClick={() => setShowIssues(!showIssues)}
+                  aria-expanded={showIssues}
                   className="w-full px-5 py-3 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-ctp-surface0 transition-colors"
                 >
                   <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium">
@@ -371,8 +377,8 @@ export default function History({ onLoadResult }: Props) {
                       entry.issues.map((issue) => (
                         <div key={issue.id} className="px-5 py-2.5 text-xs">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className={`inline-block w-14 text-center rounded text-[10px] font-medium ${severityBadge(issue.severity)}`}>{issue.severity}</span>
-                            <span className={"font-medium " + categoryColor(issue.category)}>{issue.category}</span>
+                            <span className={`inline-block w-14 text-center rounded text-[10px] font-medium ${severityBadgeClass(issue.severity)}`}>{issue.severity}</span>
+                            <span className={"font-medium " + categoryTextClass(issue.category)}>{issue.category}</span>
                             <span className="text-gray-400 dark:text-ctp-subtext0 font-mono">{issue.scanner}</span>
                           </div>
                           <p className="text-gray-700 dark:text-ctp-subtext0">{issue.message}</p>
@@ -406,7 +412,7 @@ export default function History({ onLoadResult }: Props) {
                         sec.map((issue) => (
                           <div key={issue.id} className="px-5 py-2.5 text-xs">
                             <div className="flex items-center gap-2 mb-0.5">
-                              <span className={`inline-block w-14 text-center rounded text-[10px] font-medium ${severityBadge(issue.severity)}`}>{issue.severity}</span>
+                              <span className={`inline-block w-14 text-center rounded text-[10px] font-medium ${severityBadgeClass(issue.severity)}`}>{issue.severity}</span>
                               <span className="text-gray-400 dark:text-ctp-subtext0 font-mono">{issue.scanner}/{issue.rule}</span>
                             </div>
                             <p className="text-gray-700 dark:text-ctp-subtext0">{issue.message}</p>

@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { GitInfo } from '../api/client'
+import EmptyState from '../components/EmptyState'
 
 interface Props {
   gitInfo: GitInfo | null
+  onScan?: () => void
+  scanning?: boolean
 }
 
 function verifiedBadge(v: string) {
@@ -18,17 +21,15 @@ function verifiedBadge(v: string) {
   }
 }
 
-export default function GitStats({ gitInfo }: Props) {
+export default function GitStats({ gitInfo, onScan, scanning }: Props) {
   const [showAuthors, setShowAuthors] = useState(false)
   const [expandedCommits, setExpandedCommits] = useState<Set<number>>(new Set())
 
   if (!gitInfo) {
     return (
-      <div className="max-w-4xl mx-auto p-8">
+      <div className="max-w-6xl mx-auto p-8">
         <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text mb-5">Git</h2>
-        <div className="card p-8 text-center">
-          <p className="text-gray-500 dark:text-ctp-subtext0">No git info available.</p>
-        </div>
+        <EmptyState message="No git info available." onScan={onScan} scanning={scanning} />
       </div>
     )
   }
@@ -43,7 +44,7 @@ export default function GitStats({ gitInfo }: Props) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-8">
+    <div className="max-w-6xl mx-auto p-8">
       <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text mb-5">Git</h2>
 
       <div className="grid grid-cols-3 gap-4 mb-5">
@@ -57,6 +58,8 @@ export default function GitStats({ gitInfo }: Props) {
         </div>
         <button
           onClick={() => setShowAuthors(!showAuthors)}
+          aria-expanded={showAuthors}
+          aria-label="Toggle authors list"
           className="card px-5 py-4 text-left cursor-pointer hover:shadow-md transition-shadow"
         >
           <p className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide font-medium mb-0.5">Authors</p>
@@ -95,6 +98,8 @@ export default function GitStats({ gitInfo }: Props) {
               <div key={i}>
                 <button
                   onClick={() => toggleCommit(i)}
+                  aria-expanded={expandedCommits.has(i)}
+                  aria-label={`${expandedCommits.has(i) ? 'Collapse' : 'Expand'} commit ${c.message}`}
                   className="w-full px-5 py-3 flex items-center gap-4 text-left cursor-pointer hover:bg-gray-50 dark:hover:bg-ctp-surface0 transition-colors"
                 >
                   <span className="text-xs text-gray-400 dark:text-ctp-subtext0 font-mono shrink-0 w-[22ch]">
