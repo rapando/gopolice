@@ -325,22 +325,6 @@ export function subscribeStatus(onEvent: (e: ProgressEvent) => void): () => void
   return () => es.close()
 }
 
-export function severityColor(s: string): string {
-  switch (s) {
-    case 'error': return 'text-red-600 bg-red-50 border-red-200'
-    case 'warning': return 'text-yellow-700 bg-yellow-50 border-yellow-200'
-    default: return 'text-blue-600 bg-blue-50 border-blue-200'
-  }
-}
-
-export function severityBadge(s: string): string {
-  switch (s) {
-    case 'error': return 'bg-red-100 text-red-800'
-    case 'warning': return 'bg-yellow-100 text-yellow-800'
-    default: return 'bg-blue-100 text-blue-800'
-  }
-}
-
 export function computeGrade(issues: { severity: string }[]): string {
   let score = 0
   for (const iss of issues) {
@@ -360,14 +344,3 @@ export function durationStr(d: number): string {
   return (d / 1_000_000_000).toFixed(2) + 's'
 }
 
-export function categoryColor(c: string): string {
-  switch (c) {
-    case 'bug': return 'text-red-700'
-    case 'security': return 'text-orange-700'
-    case 'style': return 'text-gray-600'
-    case 'complexity': return 'text-purple-700'
-    case 'test': return 'text-green-700'
-    case 'deadcode': return 'text-rose-700'
-    default: return 'text-gray-600'
-  }
-}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getTrends, TrendPoint, TrendsData } from '../api/client'
+import { useThemeColors } from '../hooks/useThemeColors'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 
 type Range = '7d' | '30d' | '90d' | 'all'
@@ -27,6 +28,12 @@ function formatTS(ts: string): string {
 }
 
 export default function Trends() {
+  const colors = useThemeColors()
+  const tooltipStyle = {
+    contentStyle: { fontSize: 12, backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+    labelStyle: { color: colors.text },
+    itemStyle: { color: colors.text },
+  }
   const [data, setData] = useState<TrendsData | null>(null)
   const [range, setRange] = useState<Range>('30d')
   const [loading, setLoading] = useState(true)
@@ -97,6 +104,7 @@ export default function Trends() {
             <button
               key={r.key}
               onClick={() => setRange(r.key)}
+              aria-pressed={range === r.key}
               className={`px-2.5 py-1 text-xs rounded transition-colors ${
                 range === r.key
                   ? 'bg-blue-100 text-blue-700 dark:bg-ctp-surface1 dark:text-ctp-lavender'
@@ -110,11 +118,14 @@ export default function Trends() {
       </div>
 
       <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded overflow-hidden">
-        <div className="flex border-b border-gray-200 dark:border-ctp-surface1">
+        <div className="flex border-b border-gray-200 dark:border-ctp-surface1" role="tablist">
           {tabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setActiveChart(t.key)}
+              role="tab"
+              aria-selected={activeChart === t.key}
+              aria-controls={`trends-panel-${t.key}`}
               className={`px-4 py-2 text-xs font-medium transition-colors ${
                 activeChart === t.key
                   ? 'text-blue-600 border-b-2 border-blue-500 dark:text-ctp-lavender dark:border-ctp-lavender'
@@ -126,18 +137,18 @@ export default function Trends() {
           ))}
         </div>
 
-        <div className="p-4">
+        <div className="p-4" role="tabpanel" id={`trends-panel-${activeChart}`}>
           {activeChart === 'issues' && (
             <ResponsiveContainer width="100%" height={280}>
               <LineChart data={issueData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="ts" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="Errors" stroke="#ef4444" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="Warnings" stroke="#eab308" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="Infos" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                <XAxis dataKey="ts" tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} />
+                <YAxis tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} allowDecimals={false} />
+                <Tooltip {...tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 12, color: colors.text }} />
+                <Line type="monotone" dataKey="Errors" stroke={colors.red} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="Warnings" stroke={colors.yellow} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="Infos" stroke={colors.blue} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -145,11 +156,11 @@ export default function Trends() {
           {activeChart === 'grade' && (
             <ResponsiveContainer width="100%" height={280}>
               <LineChart data={gradeData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="ts" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                <YAxis domain={[0.5, 5.5]} ticks={[1, 2, 3, 4, 5]} tickFormatter={(v: any) => ['', 'F', 'D', 'C', 'B', 'A'][v] ?? ''} tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                <Tooltip contentStyle={{ fontSize: 12 }} />
-                <Line type="stepAfter" dataKey="Grade" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 4 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                <XAxis dataKey="ts" tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} />
+                <YAxis domain={[0.5, 5.5]} ticks={[1, 2, 3, 4, 5]} tickFormatter={(v: any) => ['', 'F', 'D', 'C', 'B', 'A'][v] ?? ''} tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} />
+                <Tooltip {...tooltipStyle} />
+                <Line type="stepAfter" dataKey="Grade" stroke={colors.mauve} strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -157,11 +168,11 @@ export default function Trends() {
           {activeChart === 'coverage' && (
             <ResponsiveContainer width="100%" height={280}>
               <LineChart data={coverageData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="ts" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} stroke="#94a3b8" unit="%" />
-                <Tooltip formatter={(v: any) => [`${v}%`, 'Coverage']} />
-                <Line type="monotone" dataKey="Coverage" stroke="#22c55e" strokeWidth={2} dot={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                <XAxis dataKey="ts" tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} unit="%" />
+                <Tooltip {...tooltipStyle} formatter={(v: any) => [`${v}%`, 'Coverage']} />
+                <Line type="monotone" dataKey="Coverage" stroke={colors.green} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -169,11 +180,11 @@ export default function Trends() {
           {activeChart === 'bench' && (
             <ResponsiveContainer width="100%" height={280}>
               <LineChart data={benchData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="ts" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" unit=" ns" />
-                <Tooltip formatter={(v: any) => [`${(v ?? 0).toLocaleString()} ns/op`, 'Avg']} />
-                <Line type="monotone" dataKey="ns/op" stroke="#f97316" strokeWidth={2} dot={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+                <XAxis dataKey="ts" tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} />
+                <YAxis tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} unit=" ns" />
+                <Tooltip {...tooltipStyle} formatter={(v: any) => [`${(v ?? 0).toLocaleString()} ns/op`, 'Avg']} />
+                <Line type="monotone" dataKey="ns/op" stroke={colors.peach} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           )}

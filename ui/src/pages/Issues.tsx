@@ -1,22 +1,13 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { getSnippet, batchFix, Issue, Snippet } from '../api/client'
 import FixPlan from '../components/FixPlan'
+import { severities, severityIcon, severityTextClass, severityBadgeClass } from '../lib/severity'
 
 interface Props {
   issues: Issue[]
   onSelectIssue: (id: string) => void
   onSelectFile: (file: string) => void
   projectName?: string
-}
-
-const severities = ['error', 'warning', 'info'] as const
-
-const sevIcon: Record<string, string> = { error: '●', warning: '◆', info: '○' }
-const sevColor: Record<string, string> = { error: 'text-red-500', warning: 'text-yellow-500', info: 'text-blue-500' }
-const sevBadge: Record<string, string> = {
-  error: 'bg-red-50 text-red-700',
-  warning: 'bg-yellow-50 text-yellow-700',
-  info: 'bg-blue-50 text-blue-700',
 }
 
 type GroupBy = '' | 'rule' | 'file' | 'category' | 'module'
@@ -138,13 +129,14 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
             <button
               key={s}
               onClick={() => setSelectedSeverity(selectedSeverity === s ? '' : s)}
+              aria-pressed={selectedSeverity === s}
               className={`px-3 py-1.5 text-xs font-medium rounded border transition-colors ${
                 selectedSeverity === s
-                  ? `${sevBadge[s]} border-current`
+                  ? `${severityBadgeClass(s)} border-current`
                   : 'border-gray-300 text-gray-500 hover:bg-gray-100 dark:border-ctp-surface1 dark:text-ctp-subtext0 dark:hover:bg-ctp-surface0'
               }`}
             >
-              <span className={sevColor[s]}>{sevIcon[s]}</span>
+              <span className={severityTextClass(s)}>{severityIcon(s)}</span>
               <span className="ml-1.5 capitalize">{s}</span>
             </button>
           ))}
@@ -155,6 +147,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
             <button
               key={g}
               onClick={() => { setGroupBy(g); setSelected(new Set()) }}
+              aria-pressed={groupBy === g}
               className={`px-2 py-1 text-xs rounded transition-colors ${
                 groupBy === g
                   ? 'bg-blue-100 text-blue-700 dark:bg-ctp-surface1 dark:text-ctp-lavender'
@@ -327,8 +320,8 @@ function IssueRow({ issue, selected, onToggleSelect, onSelectIssue, onFileClick 
       </td>
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
-          <span className={`text-base ${sevColor[issue.severity]}`}>{sevIcon[issue.severity]}</span>
-          <span className={`px-2 py-0.5 rounded text-xs font-medium ${sevBadge[issue.severity]}`}>
+          <span className={`text-base ${severityTextClass(issue.severity)}`}>{severityIcon(issue.severity)}</span>
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${severityBadgeClass(issue.severity)}`}>
             {issue.severity}
           </span>
           <span className="text-xs text-gray-400 dark:text-ctp-subtext1 font-mono">{issue.scanner}</span>

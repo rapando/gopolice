@@ -1,15 +1,11 @@
 import { useState, useEffect } from 'react'
 import { getIssue, getSnippet, applyFix, undoFix, Issue, FixResult, Snippet } from '../api/client'
+import { severityBadgeClass } from '../lib/severity'
+import Spinner from '../components/Spinner'
 
 interface Props {
   issueId: string
   onBack: () => void
-}
-
-const sevBadge: Record<string, string> = {
-  error: 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-ctp-red',
-  warning: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-ctp-yellow',
-  info: 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-ctp-blue',
 }
 
 export default function IssueDetail({ issueId, onBack }: Props) {
@@ -63,7 +59,7 @@ export default function IssueDetail({ issueId, onBack }: Props) {
       <div className="max-w-4xl mx-auto p-8">
         <button onClick={onBack} className="text-sm text-blue-600 dark:text-ctp-blue hover:underline mb-4">&larr; Back</button>
         <div className="flex items-center justify-center h-48">
-          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 dark:border-ctp-blue border-t-transparent" />
+          <Spinner />
         </div>
       </div>
     )
@@ -78,7 +74,7 @@ export default function IssueDetail({ issueId, onBack }: Props) {
 
       <div className="card overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-ctp-surface1 flex items-center gap-3">
-          <span className={`px-2.5 py-1 rounded text-xs font-medium ${sevBadge[issue.severity]}`}>
+          <span className={`px-2.5 py-1 rounded text-xs font-medium ${severityBadgeClass(issue.severity)}`}>
             {issue.severity.toUpperCase()}
           </span>
           <span className="text-xs font-mono text-gray-500 dark:text-ctp-subtext0">{issue.scanner}</span>

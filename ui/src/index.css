@@ -303,7 +303,7 @@
   }
 
   ::selection {
-    @apply bg-blue-500/20;
+    background-color: color-mix(in srgb, var(--ctp-lavender) 25%, transparent);
   }
 }
 

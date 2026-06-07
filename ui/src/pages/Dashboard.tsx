@@ -1,7 +1,10 @@
 import { useMemo } from 'react'
 import { ScanResult, computeGrade, ProgressEvent } from '../api/client'
+import { useThemeColors } from '../hooks/useThemeColors'
+import { severityTextClass } from '../lib/severity'
 import Trends from '../components/Trends'
 import ScanProgress from '../components/ScanProgress'
+import EmptyState from '../components/EmptyState'
 
 interface Props {
   result: ScanResult | null
@@ -45,6 +48,7 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
 }
 
 export default function Dashboard({ result, scanEvents, scanning, readingResults, onScan }: Props) {
+  const colors = useThemeColors()
   const showProgress = scanning || readingResults
 
   const errCount = result?.issues.filter((i) => i.severity === 'error').length ?? 0
@@ -86,14 +90,11 @@ export default function Dashboard({ result, scanEvents, scanning, readingResults
 
   if (!result) {
     return (
-      <div className="max-w-5xl mx-auto p-8">
+      <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1600px)' }}>
         {showProgress ? (
           <ScanProgress events={scanEvents} readingResults={readingResults} />
         ) : (
-          <div className="card p-10 text-center">
-            <p className="text-gray-500 dark:text-ctp-subtext0 mb-4">No scan results yet.</p>
-            <button onClick={onScan} className="px-4 py-2 text-sm font-medium bg-green-600 text-white dark:bg-ctp-green dark:text-ctp-base rounded hover:bg-green-700 transition-colors">Run Scan</button>
-          </div>
+          <EmptyState message="No scan results yet." onScan={onScan} scanning={scanning} />
         )}
       </div>
     )
@@ -129,21 +130,21 @@ export default function Dashboard({ result, scanEvents, scanning, readingResults
 
         {/* Issues summary */}
         <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-xl p-4 flex items-center gap-3">
-          <Donut pct={totalIssues > 0 ? (errCount / totalIssues) * 100 : 0} color="#ef4444" />
+          <Donut pct={totalIssues > 0 ? (errCount / totalIssues) * 100 : 0} color={colors.red} />
           <div>
             <div className="text-2xl font-bold text-gray-800 dark:text-ctp-text">{totalIssues}</div>
             <div className="text-[10px] text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide">Issues</div>
             <div className="flex gap-2 mt-1 text-[11px]">
-              <span className="text-red-500 font-medium">{errCount} err</span>
-              <span className="text-yellow-500 font-medium">{warnCount} warn</span>
-              <span className="text-blue-500 font-medium">{infoCount} info</span>
+              <span className={`font-medium ${severityTextClass('error')}`}>{errCount} err</span>
+              <span className={`font-medium ${severityTextClass('warning')}`}>{warnCount} warn</span>
+              <span className={`font-medium ${severityTextClass('info')}`}>{infoCount} info</span>
             </div>
           </div>
         </div>
 
         {/* Tests summary */}
         <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-xl p-4 flex items-center gap-3">
-          <Donut pct={passRate ?? 0} color={passRate !== null && passRate >= 80 ? '#22c55e' : passRate !== null && passRate >= 50 ? '#eab308' : '#ef4444'} />
+          <Donut pct={passRate ?? 0} color={passRate !== null && passRate >= 80 ? colors.green : passRate !== null && passRate >= 50 ? colors.yellow : colors.red} />
           <div>
             <div className="text-2xl font-bold text-gray-800 dark:text-ctp-text">{testResult?.total.total ?? '-'}</div>
             <div className="text-[10px] text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide">Tests</div>
@@ -159,7 +160,7 @@ export default function Dashboard({ result, scanEvents, scanning, readingResults
 
         {/* Coverage summary */}
         <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-xl p-4 flex items-center gap-3">
-          <Donut pct={avgCoverage ?? 0} color={avgCoverage !== null && avgCoverage >= 80 ? '#22c55e' : avgCoverage !== null && avgCoverage >= 50 ? '#eab308' : '#ef4444'} />
+          <Donut pct={avgCoverage ?? 0} color={avgCoverage !== null && avgCoverage >= 80 ? colors.green : avgCoverage !== null && avgCoverage >= 50 ? colors.yellow : colors.red} />
           <div>
             <div className="text-2xl font-bold text-gray-800 dark:text-ctp-text">{avgCoverage !== null ? `${avgCoverage.toFixed(0)}%` : '-'}</div>
             <div className="text-[10px] text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide">Coverage</div>
@@ -310,7 +311,7 @@ export default function Dashboard({ result, scanEvents, scanning, readingResults
                 <div className="w-32 h-2 bg-gray-200 dark:bg-ctp-surface1 rounded-full overflow-hidden shrink-0">
                   <div className="h-full rounded-full transition-all" style={{
                     width: `${Math.min(p.coverage, 100)}%`,
-                    backgroundColor: p.coverage >= 80 ? '#22c55e' : p.coverage >= 50 ? '#eab308' : '#ef4444',
+                    backgroundColor: p.coverage >= 80 ? colors.green : p.coverage >= 50 ? colors.yellow : colors.red,
                   }} />
                 </div>
                 <span className="font-mono text-gray-500 dark:text-ctp-subtext0 w-10 text-right tabular-nums">{p.coverage.toFixed(0)}%</span>

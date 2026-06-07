@@ -2,6 +2,14 @@ import { useMemo, useRef, useEffect, useState } from 'react'
 import * as d3 from 'd3'
 import { BenchmarkResult, ProfileData, ProfileEntry } from '../api/client'
 import PerformancePlan from '../components/PerformancePlan'
+import { useThemeColors, ThemeColors } from '../hooks/useThemeColors'
+import EmptyState from '../components/EmptyState'
+
+// A categorical palette drawn from the active theme's accent colors, so
+// per-series/per-category chart colors stay coordinated across schemes.
+function categoricalPalette(c: ThemeColors): string[] {
+  return [c.red, c.peach, c.yellow, c.green, c.teal, c.sapphire, c.blue, c.lavender, c.mauve, c.pink]
+}
 
 interface Props {
   benchmarks: BenchmarkResult[] | null
@@ -123,9 +131,8 @@ function extractFnShort(fn: string): string {
   return dot > 0 ? fn.slice(dot + 1) : fn
 }
 
-const profileColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#6366f1', '#a855f7', '#ec4899', '#14b8a6', '#84cc16']
-
 function BenchmarkRanking({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
+  const colors = useThemeColors()
   const svgRef = useRef<SVGSVGElement>(null)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; data: BenchmarkResult | null }>({ x: 0, y: 0, data: null })
 
@@ -149,14 +156,14 @@ function BenchmarkRanking({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
     const xScale = d3.scaleLinear().domain([0, maxTime * 1.15]).range([0, innerW])
     const colorScale = d3.scaleSequentialLog()
       .domain([Math.max(maxAllocs, 1), 0])
-      .interpolator(d3.interpolateRgbBasis(['#22c55e', '#eab308', '#ef4444']))
+      .interpolator(d3.interpolateRgbBasis([colors.green, colors.yellow, colors.red]))
 
     const g = svg.append('g').attr('transform', `translate(${pad.left},${pad.top})`)
 
     sorted.forEach((b, i) => {
       const y = i * rowH
       const w = Math.max(xScale(b.time_per_op), 2)
-      const color = b.allocs_per_op > 0 ? colorScale(b.allocs_per_op) : '#22c55e'
+      const color = b.allocs_per_op > 0 ? colorScale(b.allocs_per_op) : colors.green
 
       g.append('rect')
         .attr('x', 0).attr('y', y).attr('width', w).attr('height', rowH - 4)
@@ -177,30 +184,30 @@ function BenchmarkRanking({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
         })
 
       g.append('text').attr('x', w + 6).attr('y', y + rowH / 2 + 1)
-        .attr('font-size', '11px').attr('fill', '#374151').attr('class', 'dark:fill-ctp-subtext1')
+        .attr('font-size', '11px').attr('fill', colors.muted)
         .attr('dominant-baseline', 'middle')
         .text(`${fmtShortNS(b.time_per_op)} · ${b.allocs_per_op} allocs`)
 
       g.append('text').attr('x', -4).attr('y', y + rowH / 2 + 1)
-        .attr('font-size', '11px').attr('fill', '#6b7280').attr('class', 'dark:fill-ctp-subtext0')
+        .attr('font-size', '11px').attr('fill', colors.muted)
         .attr('dominant-baseline', 'middle').attr('text-anchor', 'end')
         .style('white-space', 'nowrap')
         .text(extractShortName(b.name))
     })
 
     g.append('text').attr('x', 0).attr('y', height - pad.bottom + 6)
-      .attr('font-size', '10px').attr('fill', '#9ca3af').attr('class', 'dark:fill-ctp-overlay1')
+      .attr('font-size', '10px').attr('fill', colors.overlay1)
       .text('← faster')
     g.append('text').attr('x', innerW).attr('y', height - pad.bottom + 6)
-      .attr('font-size', '10px').attr('fill', '#9ca3af').attr('class', 'dark:fill-ctp-overlay1')
+      .attr('font-size', '10px').attr('fill', colors.overlay1)
       .attr('text-anchor', 'end').text('slower →')
-  }, [sorted, maxTime, maxAllocs])
+  }, [sorted, maxTime, maxAllocs, colors])
 
   return (
     <div className="relative bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg overflow-hidden mb-6">
       <svg ref={svgRef} className="w-full" style={{ minHeight: 200 }} />
       {tooltip.data && (
-        <div className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-relaxed max-w-xs"
+        <div role="tooltip" className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-relaxed max-w-xs"
           style={{ left: Math.min(tooltip.x, window.innerWidth - 260), top: Math.max(tooltip.y, 10) }}
         >
           <div className="font-semibold text-sm mb-1 break-all">{tooltip.data.name}</div>
@@ -219,6 +226,8 @@ function BenchmarkRanking({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
 interface DonutDatum { label: string; pct: number; fn: string }
 
 function AllocationDonut({ entries }: { entries: ProfileEntry[] }) {
+  const colors = useThemeColors()
+  const profileColors = useMemo(() => categoricalPalette(colors), [colors])
   const svgRef = useRef<SVGSVGElement>(null)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string }>({ x: 0, y: 0, text: '' })
 
@@ -250,7 +259,7 @@ function AllocationDonut({ entries }: { entries: ProfileEntry[] }) {
       .attr('d', (d) => arc(d) as string)
       .attr('fill', (_, i) => profileColors[i % profileColors.length])
       .attr('opacity', 0.85)
-      .attr('stroke', '#fff').attr('stroke-width', 2)
+      .attr('stroke', colors.surface).attr('stroke-width', 2)
       .style('cursor', 'pointer')
       .on('mouseover', function (event: MouseEvent, d) {
         d3.select(this).attr('d', hoverArc(d) as string).attr('opacity', 1)
@@ -269,10 +278,10 @@ function AllocationDonut({ entries }: { entries: ProfileEntry[] }) {
 
     // Center text
     g.append('text').attr('text-anchor', 'middle').attr('y', -6)
-      .attr('font-size', '20px').attr('font-weight', 'bold').attr('fill', '#374151').attr('class', 'dark:fill-ctp-text')
+      .attr('font-size', '20px').attr('font-weight', 'bold').attr('fill', colors.text)
       .text(`${data.length} funcs`)
     g.append('text').attr('text-anchor', 'middle').attr('y', 14)
-      .attr('font-size', '11px').attr('fill', '#6b7280').attr('class', 'dark:fill-ctp-subtext0')
+      .attr('font-size', '11px').attr('fill', colors.muted)
       .text('top allocators')
 
     // Legend
@@ -283,16 +292,16 @@ function AllocationDonut({ entries }: { entries: ProfileEntry[] }) {
       legG.append('rect').attr('x', lx).attr('y', ly - 10).attr('width', 10).attr('height', 10)
         .attr('rx', 2).attr('fill', profileColors[i % profileColors.length]).attr('opacity', 0.85)
       legG.append('text').attr('x', lx + 14).attr('y', ly - 1)
-        .attr('font-size', '10px').attr('fill', '#6b7280').attr('class', 'dark:fill-ctp-subtext0')
+        .attr('font-size', '10px').attr('fill', colors.muted)
         .text(`${d.label} (${d.pct.toFixed(1)}%)`)
     })
-  }, [entries])
+  }, [entries, colors, profileColors])
 
   return (
     <div className="relative bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg overflow-hidden">
       <svg ref={svgRef} className="w-full" style={{ height: 320 }} />
       {tooltip.text && (
-        <div className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-2 py-1"
+        <div role="tooltip" className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-2 py-1"
           style={{ left: tooltip.x + 10, top: tooltip.y - 10 }}
         >{tooltip.text}</div>
       )}
@@ -301,6 +310,8 @@ function AllocationDonut({ entries }: { entries: ProfileEntry[] }) {
 }
 
 function FlamegraphChart({ entries }: { entries: ProfileEntry[] }) {
+  const colors = useThemeColors()
+  const profileColors = useMemo(() => categoricalPalette(colors), [colors])
   const svgRef = useRef<SVGSVGElement>(null)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string }>({ x: 0, y: 0, text: '' })
 
@@ -324,7 +335,7 @@ function FlamegraphChart({ entries }: { entries: ProfileEntry[] }) {
 
     const pkgColors = new Map<string, string>()
     Array.from(groups.keys()).forEach((pkg, i) => pkgColors.set(pkg, profileColors[i % profileColors.length]))
-    const color = (pkg: string) => pkgColors.get(pkg) || '#6366f1'
+    const color = (pkg: string) => pkgColors.get(pkg) || colors.lavender
 
     const width = svgRef.current.clientWidth
     const rowH = 24
@@ -341,7 +352,7 @@ function FlamegraphChart({ entries }: { entries: ProfileEntry[] }) {
 
     // Header
     g.append('text').attr('x', 0).attr('y', 14).attr('font-size', '11px').attr('font-weight', 'bold')
-      .attr('fill', '#374151').attr('class', 'dark:fill-ctp-text').text(`CPU Profile · Top ${top.length} functions`)
+      .attr('fill', colors.text).text(`CPU Profile · Top ${top.length} functions`)
 
     let yy = headerH
     for (const [pkg, grp] of rows) {
@@ -371,19 +382,22 @@ function FlamegraphChart({ entries }: { entries: ProfileEntry[] }) {
             d3.select(this).attr('opacity', 0.35)
             setTooltip({ x: 0, y: 0, text: '' })
           })
-        g.append('text').attr('x', 6).attr('y', yy + rowH / 2 + 1).attr('font-size', '9px')
-          .attr('fill', '#374151').attr('class', 'dark:fill-ctp-subtext1').attr('dominant-baseline', 'middle')
-          .text(fn.pct > 5 ? `${fn.name} ${fn.pct.toFixed(1)}%` : '')
+        const fnLabel = `${fn.name} ${fn.pct.toFixed(1)}%`
+        if (fnLabel.length * 5 < fnW - 8) {
+          g.append('text').attr('x', 6).attr('y', yy + rowH / 2 + 1).attr('font-size', '9px')
+            .attr('fill', colors.muted).attr('dominant-baseline', 'middle')
+            .text(fnLabel)
+        }
         yy += rowH
       }
     }
-  }, [entries])
+  }, [entries, colors, profileColors])
 
   return (
     <div className="relative bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg overflow-hidden mb-6">
       <svg ref={svgRef} className="w-full" style={{ minHeight: 200 }} />
       {tooltip.text && (
-        <div className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-2 py-1"
+        <div role="tooltip" className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-2 py-1"
           style={{ left: tooltip.x, top: tooltip.y }}
         >{tooltip.text}</div>
       )}
@@ -449,12 +463,9 @@ function inferCategory(name: string): string {
   return m ? m[2] : 'Other'
 }
 
-const catPalette = [
-  '#6366f1', '#f59e0b', '#22c55e', '#ef4444', '#ec4899',
-  '#14b8a6', '#f97316', '#8b5cf6', '#06b6d4', '#84cc16',
-]
-
 function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
+  const colors = useThemeColors()
+  const catPalette = useMemo(() => categoricalPalette(colors), [colors])
   const svgRef = useRef<SVGSVGElement>(null)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; data: BenchmarkResult | null }>({ x: 0, y: 0, data: null })
 
@@ -470,7 +481,7 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
     const m = new Map<string, string>()
     categories.forEach((c, i) => m.set(c, catPalette[i % catPalette.length]))
     return m
-  }, [categories])
+  }, [categories, catPalette])
 
   useEffect(() => {
     if (!benchmarks.length || !svgRef.current) return
@@ -480,7 +491,7 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
 
     const width = svgRef.current.clientWidth
     const height = Math.max(500, window.innerHeight * 0.5)
-    const pad = { top: 35, right: 140, bottom: 60, left: 70 }
+    const pad = { top: 35, right: Math.round(Math.max(90, Math.min(140, width * 0.11))), bottom: 60, left: 70 }
     const innerW = width - pad.left - pad.right
     const innerH = height - pad.top - pad.bottom
 
@@ -502,37 +513,37 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
     // Grid lines
     g.append('g')
       .call(d3.axisLeft(yScale).ticks(8).tickSize(-innerW).tickFormat(() => ''))
-      .attr('stroke', '#e5e7eb').attr('class', 'dark:stroke-ctp-surface1')
+      .attr('stroke', colors.border)
 
     g.append('g')
       .call(d3.axisBottom(xScale).ticks(8).tickSize(innerH).tickFormat(() => ''))
       .attr('transform', `translate(0,${innerH})`)
-      .attr('stroke', '#e5e7eb').attr('class', 'dark:stroke-ctp-surface1')
+      .attr('stroke', colors.border)
 
     // Axes
     const xAxis = g.append('g')
       .attr('transform', `translate(0,${innerH})`)
       .call(d3.axisBottom(xScale).ticks(6).tickFormat((d) => fmtShortNS(d as number)))
-      .attr('color', '#9ca3af').attr('font-size', '11px')
+      .attr('color', colors.overlay1).attr('font-size', '11px')
 
-    xAxis.selectAll('.domain').attr('stroke', '#d1d5db').attr('class', 'dark:stroke-ctp-surface1')
-    xAxis.selectAll('.tick line').attr('stroke', '#d1d5db').attr('class', 'dark:stroke-ctp-surface1')
+    xAxis.selectAll('.domain').attr('stroke', colors.border)
+    xAxis.selectAll('.tick line').attr('stroke', colors.border)
 
     const yAxis = g.append('g')
       .call(d3.axisLeft(yScale).ticks(6))
-      .attr('color', '#9ca3af').attr('font-size', '11px')
+      .attr('color', colors.overlay1).attr('font-size', '11px')
 
-    yAxis.selectAll('.domain').attr('stroke', '#d1d5db').attr('class', 'dark:stroke-ctp-surface1')
-    yAxis.selectAll('.tick line').attr('stroke', '#d1d5db').attr('class', 'dark:stroke-ctp-surface1')
+    yAxis.selectAll('.domain').attr('stroke', colors.border)
+    yAxis.selectAll('.tick line').attr('stroke', colors.border)
 
     // Axis labels
     g.append('text').attr('x', innerW / 2).attr('y', innerH + 42)
       .attr('text-anchor', 'middle').attr('font-size', '12px')
-      .attr('fill', '#6b7280').attr('class', 'dark:fill-ctp-overlay1').text('Time / Op')
+      .attr('fill', colors.muted).text('Time / Op')
 
     g.append('text').attr('y', -42).attr('x', -(innerH / 2))
       .attr('transform', 'rotate(-90)').attr('text-anchor', 'middle').attr('font-size', '12px')
-      .attr('fill', '#6b7280').attr('class', 'dark:fill-ctp-overlay1').text('Allocs / Op')
+      .attr('fill', colors.muted).text('Allocs / Op')
 
     // Quadrant divider lines
     const medTime = d3.median(benchmarks, (d) => d.time_per_op) || 0
@@ -540,20 +551,18 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
 
     g.append('line').attr('x1', xScale(medTime)).attr('x2', xScale(medTime))
       .attr('y1', 0).attr('y2', innerH)
-      .attr('stroke', '#d1d5db').attr('stroke-dasharray', '4,4').attr('stroke-width', 1)
-      .attr('class', 'dark:stroke-ctp-surface1')
+      .attr('stroke', colors.border).attr('stroke-dasharray', '4,4').attr('stroke-width', 1)
 
     g.append('line').attr('x1', 0).attr('x2', innerW)
       .attr('y1', yScale(medAllocs)).attr('y2', yScale(medAllocs))
-      .attr('stroke', '#d1d5db').attr('stroke-dasharray', '4,4').attr('stroke-width', 1)
-      .attr('class', 'dark:stroke-ctp-surface1')
+      .attr('stroke', colors.border).attr('stroke-dasharray', '4,4').attr('stroke-width', 1)
 
     // Quadrant badges
     const qBadges: { x: number; y: number; anchor: string; label: string; color: string; desc: string }[] = [
-      { x: innerW - 6, y: 4, anchor: 'end', label: '✦ Best', color: '#16a34a', desc: 'Fast · low allocs' },
-      { x: innerW - 6, y: yScale(medAllocs) + 14, anchor: 'end', label: 'Fast', color: '#22c55e', desc: 'but alloc-heavy' },
-      { x: 6, y: 4, anchor: 'start', label: '✘ Worst', color: '#ef4444', desc: 'Slow · alloc-heavy' },
-      { x: 6, y: yScale(medAllocs) + 14, anchor: 'start', label: 'Slow', color: '#f97316', desc: 'but few allocs' },
+      { x: innerW - 6, y: 4, anchor: 'end', label: '✦ Best', color: colors.green, desc: 'Fast · low allocs' },
+      { x: innerW - 6, y: yScale(medAllocs) + 14, anchor: 'end', label: 'Fast', color: colors.teal, desc: 'but alloc-heavy' },
+      { x: 6, y: 4, anchor: 'start', label: '✘ Worst', color: colors.red, desc: 'Slow · alloc-heavy' },
+      { x: 6, y: yScale(medAllocs) + 14, anchor: 'start', label: 'Slow', color: colors.peach, desc: 'but few allocs' },
     ]
     qBadges.forEach((qb) => {
       const bg = g.append('g')
@@ -565,8 +574,8 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
         .attr('y', qb.y - 9).attr('width', bbox.width + 6).attr('height', bbox.height + 2)
         .attr('rx', 3).attr('fill', qb.color).attr('opacity', 0.12)
       g.append('text').attr('x', qb.x).attr('y', qb.y + 13)
-        .attr('text-anchor', qb.anchor).attr('font-size', '9px').attr('fill', '#9ca3af')
-        .attr('class', 'dark:fill-ctp-overlay1').text(qb.desc)
+        .attr('text-anchor', qb.anchor).attr('font-size', '9px').attr('fill', colors.overlay1)
+        .text(qb.desc)
     })
 
     // Dots + labels
@@ -584,8 +593,8 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
 
       dotGroup.append('circle')
         .attr('cx', cx).attr('cy', cy).attr('r', r)
-        .attr('fill', catColor.get(cat) || '#6366f1')
-        .attr('opacity', 0.75).attr('stroke', '#fff').attr('stroke-width', 1.5)
+        .attr('fill', catColor.get(cat) || colors.lavender)
+        .attr('opacity', 0.75).attr('stroke', colors.surface).attr('stroke-width', 1.5)
         .style('cursor', 'pointer')
         .on('mouseover', function (event: MouseEvent) {
           d3.select(this).attr('opacity', 1).attr('stroke-width', 3)
@@ -605,10 +614,9 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
       const label = extractShortName(d.name)
       dotGroup.append('text')
         .attr('x', cx + r + 5).attr('y', cy + 4)
-        .attr('font-size', '10px').attr('fill', '#374151')
-        .attr('class', 'dark:fill-ctp-subtext1')
+        .attr('font-size', '10px').attr('fill', colors.muted)
         .style('pointer-events', 'none')
-        .style('text-shadow', '0 0 3px white, 0 0 3px white')
+        .style('text-shadow', `0 0 3px ${colors.surface}, 0 0 3px ${colors.surface}`)
         .text(label)
     })
 
@@ -633,16 +641,16 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
 
     // Category legend (right side)
     const legG = svg.append('g').attr('transform', `translate(${width - pad.right + 12}, ${pad.top + 20})`)
-    legG.append('text').text('Category').attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', '#6b7280').attr('class', 'dark:fill-ctp-overlay1')
+    legG.append('text').text('Category').attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', colors.overlay1)
     categories.forEach((c, i) => {
       const ly = (i + 1) * 20
       legG.append('circle').attr('cx', 0).attr('cy', ly).attr('r', 5).attr('fill', catPalette[i % catPalette.length]).attr('opacity', 0.8)
-      legG.append('text').attr('x', 12).attr('y', ly + 4).attr('font-size', '10px').attr('fill', '#6b7280').attr('class', 'dark:fill-ctp-subtext0').text(c)
+      legG.append('text').attr('x', 12).attr('y', ly + 4).attr('font-size', '10px').attr('fill', colors.muted).text(c)
     })
 
     // Size legend
     const sizeLegY = (categories.length + 2) * 20
-    legG.append('text').text('Bytes/Op').attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', '#6b7280').attr('class', 'dark:fill-ctp-overlay1').attr('y', sizeLegY)
+    legG.append('text').text('Bytes/Op').attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', colors.overlay1).attr('y', sizeLegY)
     const sizeSamples = [
       { r: 5, label: '0 B' },
       { r: 10, label: '~100 B' },
@@ -650,10 +658,10 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
     ]
     sizeSamples.forEach((s, i) => {
       const sy = sizeLegY + (i + 1) * 22
-      legG.append('circle').attr('cx', 0).attr('cy', sy).attr('r', s.r).attr('fill', '#94a3b8').attr('opacity', 0.5)
-      legG.append('text').attr('x', s.r + 8).attr('y', sy + 4).attr('font-size', '10px').attr('fill', '#9ca3af').attr('class', 'dark:fill-ctp-overlay1').text(s.label)
+      legG.append('circle').attr('cx', 0).attr('cy', sy).attr('r', s.r).attr('fill', colors.overlay0).attr('opacity', 0.5)
+      legG.append('text').attr('x', s.r + 8).attr('y', sy + 4).attr('font-size', '10px').attr('fill', colors.overlay1).text(s.label)
     })
-  }, [benchmarks, categories, catColor])
+  }, [benchmarks, categories, catColor, colors, catPalette])
 
   return (
     <section className="mb-10">
@@ -668,6 +676,7 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
         <svg ref={svgRef} className="w-full" style={{ height: '52vh', minHeight: 500 }} />
         {tooltip.data && (
           <div
+            role="tooltip"
             className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-relaxed max-w-xs"
             style={{ left: Math.min(tooltip.x, window.innerWidth - 260), top: Math.max(tooltip.y, 10) }}
           >
@@ -760,22 +769,15 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
 
   if (!hasBenchmarks && !hasProfile) {
     return (
-      <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1400px)' }}>
+      <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1600px)' }}>
         <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text mb-5">Performance</h2>
-        <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded p-10 text-center">
-          <p className="text-gray-500 dark:text-ctp-subtext0 mb-4">No performance data available.</p>
-          {onScan && (
-            <button onClick={onScan} disabled={scanning}
-              className="px-4 py-2 text-sm font-medium bg-green-600 text-white dark:bg-ctp-green dark:text-ctp-base rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
-            >{scanning ? 'Scanning...' : 'Run Scan'}</button>
-          )}
-        </div>
+        <EmptyState message="No performance data available." onScan={onScan} scanning={scanning} />
       </div>
     )
   }
 
   return (
-    <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1400px)' }}>
+    <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1600px)' }}>
       <div className="mb-6">
         <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text">Performance</h2>
       </div>
@@ -848,8 +850,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
                   <AllocationDonut entries={profile!.mem} />
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-2">Top Functions (Table)</h4>
-                  <ProfileTable title="" entries={profile!.mem} maxFlat={allProfileMaxFlat} />
+                  <ProfileTable title="Top Functions (Table)" entries={profile!.mem} maxFlat={allProfileMaxFlat} />
                 </div>
               </div>
             )}
