@@ -66,7 +66,10 @@ func (s *ProfileScanner) Run(ctx context.Context, cfg *config.Config, progress c
 		cpuProfile := filepath.Join(tmpDir, "cpu.pprof")
 		memProfile := filepath.Join(tmpDir, "mem.pprof")
 
-		cmd := exec.CommandContext(ctx, "go", "test", "-bench=.", "-cpuprofile="+cpuProfile, "-memprofile="+memProfile, "-count=1", pkg)
+		// Profiling flags make go test keep the test binary; -o puts it in
+		// tmpDir instead of leaving pkg.test in the scanned project.
+		testBin := filepath.Join(tmpDir, "pkg.test")
+		cmd := exec.CommandContext(ctx, "go", "test", "-run=^$", "-bench=.", "-o", testBin, "-cpuprofile="+cpuProfile, "-memprofile="+memProfile, "-count=1", pkg)
 		cmd.Dir = projectDir
 		_, _ = cmd.CombinedOutput()
 

@@ -267,7 +267,7 @@ export function deleteHistoryEntry(id: string): Promise<{ status: string }> {
   return request(`/api/history/entry/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
-export function getVersion(): Promise<{ version: string }> {
+export function getVersion(): Promise<{ version: string; project_dir?: string }> {
   return request('/api/version')
 }
 

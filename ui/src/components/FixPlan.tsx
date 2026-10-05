@@ -99,10 +99,10 @@ function renderMarkdown(md: string): string {
           return content
         })
       if (isHeader) {
-        html += '  <tr class="border-b border-gray-300 dark:border-ctp-surface1 bg-gray-100 dark:bg-ctp-mantle">' + cells.map((c) => `<th class="text-left px-3 py-2 text-xs font-semibold text-gray-600 dark:text-ctp-subtext1">${c}</th>`).join('') + '</tr>\n'
+        html += '<tr class="border-b border-line-strong bg-subtle ">' + cells.map((c) => `<th class="text-left px-3 py-2 text-xs font-semibold text-fg-muted ">${c}</th>`).join('') + '</tr>\n'
         i++ // skip separator
       } else {
-        html += '  <tr class="border-b border-gray-200 dark:border-ctp-surface1">' + cells.map((c) => `<td class="px-3 py-2 text-sm text-gray-700 dark:text-ctp-subtext0">${c}</td>`).join('') + '</tr>\n'
+        html += '  <tr class="border-b border-line ">' + cells.map((c) => `<td class="px-3 py-2 text-sm text-fg ">${c}</td>`).join('') + '</tr>\n'
       }
       continue
     }
@@ -174,28 +174,28 @@ export default function FixPlan({ issues, projectName, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white dark:bg-ctp-base rounded-lg shadow-xl w-[90vw] h-[85vh] flex flex-col">
-        <div className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-ctp-surface1">
-          <h2 className="text-base font-semibold text-gray-800 dark:text-ctp-text">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
+      <div className="bg-surface border border-line rounded-lg shadow-xl w-[90vw] max-w-6xl h-[85vh] flex flex-col">
+        <div className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-line">
+          <h2 className="text-base font-semibold text-fg">
             Export Fix Plan — {issues.length} issue{issues.length !== 1 ? 's' : ''}
           </h2>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPreview(!preview)}
-              className="px-3 py-1.5 text-xs font-medium rounded border border-gray-300 dark:border-ctp-surface1 text-gray-600 dark:text-ctp-subtext0 hover:bg-gray-100 dark:hover:bg-ctp-surface0 transition-colors"
+              className="btn-secondary"
             >
               {preview ? 'Edit' : 'Preview'}
             </button>
             <button
               onClick={handleDownload}
-              className="px-3 py-1.5 text-xs font-medium rounded bg-green-600 text-white dark:bg-ctp-green dark:text-ctp-base hover:bg-green-700 transition-colors"
+              className="btn-primary"
             >
               Download .md
             </button>
             <button
               onClick={onClose}
-              className="px-3 py-1.5 text-xs font-medium rounded text-gray-500 hover:text-gray-700 dark:text-ctp-subtext0 dark:hover:text-ctp-text transition-colors"
+              className="btn-ghost"
             >
               Close
             </button>
@@ -204,25 +204,25 @@ export default function FixPlan({ issues, projectName, onClose }: Props) {
 
         <div className="flex-1 flex overflow-hidden">
           <div
-            className={`${preview ? 'hidden' : 'flex'} flex-col w-1/2 border-r border-gray-200 dark:border-ctp-surface1`}
+            className={`${preview ? 'hidden' : 'flex'} flex-col w-1/2 border-r border-line `}
           >
-            <div className="shrink-0 px-4 py-1.5 text-xs text-gray-500 dark:text-ctp-subtext1 bg-gray-50 dark:bg-ctp-mantle border-b border-gray-200 dark:border-ctp-surface1 font-medium">
+            <div className="shrink-0 px-4 py-1.5 text-xs text-fg-muted bg-subtle border-b border-line font-medium">
               Markdown
             </div>
             <textarea
               value={markdown}
               onChange={(e) => setMarkdown(e.target.value)}
-              className="flex-1 w-full resize-none p-4 text-sm font-mono bg-white dark:bg-ctp-base text-gray-800 dark:text-ctp-text border-0 outline-none leading-relaxed"
+              className="flex-1 w-full resize-none p-4 text-sm font-mono bg-surface text-fg border-0 outline-none leading-relaxed"
             />
           </div>
           <div
             className={`${preview ? 'w-full' : 'w-1/2'} overflow-auto`}
           >
-            <div className="shrink-0 px-4 py-1.5 text-xs text-gray-500 dark:text-ctp-subtext1 bg-gray-50 dark:bg-ctp-mantle border-b border-gray-200 dark:border-ctp-surface1 font-medium">
+            <div className="shrink-0 px-4 py-1.5 text-xs text-fg-muted bg-subtle border-b border-line font-medium">
               Preview
             </div>
             <div
-              className="p-4 text-sm text-gray-800 dark:text-ctp-text leading-relaxed prose prose-sm max-w-none dark:prose-invert"
+              className="p-4 text-sm text-fg leading-relaxed prose prose-sm max-w-none"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(markdown) }}
             />
           </div>

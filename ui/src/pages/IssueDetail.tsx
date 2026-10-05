@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react'
+import { GitCommitHorizontal, Lightbulb, LoaderCircle, Undo2, Wrench } from 'lucide-react'
 import { getIssue, getSnippet, applyFix, undoFix, Issue, FixResult, Snippet } from '../api/client'
-import { severityBadgeClass } from '../lib/severity'
+import BackLink from '../components/BackLink'
+import CodeSnippet from '../components/CodeSnippet'
+import FileLink from '../components/FileLink'
+import { SeverityBadge } from '../components/Severity'
 import Spinner from '../components/Spinner'
+import { navigate } from '../lib/router'
+import { categoryTextClass } from '../lib/severity'
 
 interface Props {
   issueId: string
@@ -16,18 +22,20 @@ export default function IssueDetail({ issueId, onBack }: Props) {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    setIssue(null)
+    setSnippet(null)
+    setError('')
     getIssue(issueId).then((i) => {
       setIssue(i)
       getSnippet(i.file, i.line).then(setSnippet).catch(() => {})
-    }).catch(() => setError('Issue not found'))
+    }).catch(() => setError('This issue is not in the current scan results. It may have been fixed.'))
   }, [issueId])
 
   const handleApply = async () => {
     setFixing(true)
     setFixResult(null)
     try {
-      const result = await applyFix(issueId)
-      setFixResult(result)
+      setFixResult(await applyFix(issueId))
     } catch (err: any) {
       setFixResult({ applied: false, message: err.message, backup: null })
     }
@@ -37,124 +45,85 @@ export default function IssueDetail({ issueId, onBack }: Props) {
   const handleUndo = async () => {
     try {
       await undoFix(issueId)
-      setFixResult({ applied: true, message: 'Fix undone — file restored from backup', backup: null })
+      setFixResult({ applied: true, message: 'Fix undone. The file was restored from its backup.', backup: null })
     } catch (err: any) {
       setFixResult({ applied: false, message: `Undo failed: ${err.message}`, backup: null })
     }
   }
 
-  if (error) {
+  if (error || !issue) {
     return (
       <div className="max-w-4xl mx-auto p-8">
-        <button onClick={onBack} className="text-sm text-blue-600 dark:text-ctp-blue hover:underline mb-4">&larr; Back</button>
-        <div className="card p-8 text-center">
-          <p className="text-red-600 dark:text-ctp-red">{error}</p>
-        </div>
+        <BackLink onClick={onBack} />
+        {error ? <div className="card p-8 text-center text-fg-muted">{error}</div> : <div className="flex justify-center py-16"><Spinner /></div>}
       </div>
     )
   }
 
-  if (!issue) {
-    return (
-      <div className="max-w-4xl mx-auto p-8">
-        <button onClick={onBack} className="text-sm text-blue-600 dark:text-ctp-blue hover:underline mb-4">&larr; Back</button>
-        <div className="flex items-center justify-center h-48">
-          <Spinner />
-        </div>
-      </div>
-    )
-  }
-
-  const canFix = (issue.scanner === 'golangci-lint' &&
-    ['gofmt', 'gofumpt', 'gci'].includes(issue.rule))
+  const canFix = issue.scanner === 'golangci-lint' && ['gofmt', 'gofumpt', 'gci'].includes(issue.rule)
+  const blame = issue.git_blame
 
   return (
-    <div className="max-w-4xl mx-auto p-8">
-      <button onClick={onBack} className="text-sm text-blue-600 dark:text-ctp-blue hover:underline mb-5">&larr; Back to issues</button>
+    <div className="max-w-5xl mx-auto p-8">
+      <BackLink onClick={onBack} />
 
-      <div className="card overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-ctp-surface1 flex items-center gap-3">
-          <span className={`px-2.5 py-1 rounded text-xs font-medium ${severityBadgeClass(issue.severity)}`}>
-            {issue.severity.toUpperCase()}
-          </span>
-          <span className="text-xs font-mono text-gray-500 dark:text-ctp-subtext0">{issue.scanner}</span>
-          <span className="text-xs text-gray-400 dark:text-ctp-subtext1">{issue.rule}</span>
-        </div>
-
-        <div className="px-6 py-5">
-          <p className="text-base font-medium text-gray-800 dark:text-ctp-text mb-3">{issue.message}</p>
-
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-ctp-subtext0 mb-6">
-            <span className="font-mono text-blue-600 dark:text-ctp-blue">{issue.file}</span>
-            <span>:</span>
-            <span className="font-mono">{issue.line}</span>
-            {issue.column > 0 && <><span>:</span><span className="font-mono">{issue.column}</span></>}
+      <article className="card overflow-hidden">
+        <header className="px-6 py-5 border-b border-line">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <SeverityBadge severity={issue.severity} />
+            <span className={`text-sm font-medium capitalize ${categoryTextClass(issue.category)}`}>{issue.category}</span>
+            <span className="text-fg-subtle">·</span>
+            <span className="text-sm font-mono text-fg">{issue.rule}</span>
+            <span className="text-sm text-fg-muted">via {issue.scanner}</span>
+            {issue.module && <span className="px-1.5 rounded bg-violet-soft text-violet text-xs font-mono">{issue.module}</span>}
           </div>
+          <h2 className="text-lg font-semibold leading-snug">{issue.message}</h2>
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <FileLink file={issue.file} line={issue.line} onClick={() => navigate({ page: 'file', param: issue.file })} className="text-sm" />
+            {issue.column > 0 && <span className="text-xs text-fg-muted font-mono">column {issue.column}</span>}
+            {blame && (
+              <span className="inline-flex items-center gap-1 text-xs text-fg-muted">
+                <GitCommitHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+                {blame.author} · <span className="font-mono">{blame.commit.slice(0, 8)}</span> · {new Date(blame.date).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        </header>
 
-          {snippet && (
-            <div className="mb-6">
-              <p className="text-xs font-semibold text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-2">Code</p>
-              <div className="bg-gray-50 dark:bg-ctp-mantle border border-gray-200 dark:border-ctp-surface1 rounded overflow-hidden">
-                <pre className="text-xs font-mono leading-relaxed overflow-x-auto p-0">
-                  {(snippet.lines || []).map((l) => (
-                    <div
-                      key={l.number}
-                      className={`flex ${l.is_issue ? 'bg-red-50 dark:bg-red-950/30 border-l-2 border-red-500' : ''}`}
-                    >
-                      <span className="text-gray-400 dark:text-ctp-subtext1 text-right w-12 shrink-0 select-none py-0.5 pr-3 border-r border-gray-200 dark:border-ctp-surface1 mr-3">
-                        {l.number}
-                      </span>
-                      <span className={`py-0.5 ${l.is_issue ? 'text-red-800 dark:text-ctp-red font-medium' : 'text-gray-700 dark:text-ctp-subtext0'}`}>
-                        {l.content || ' '}
-                      </span>
-                    </div>
-                  ))}
-                </pre>
-              </div>
-            </div>
-          )}
+        {snippet && <CodeSnippet snippet={snippet} className="border-b border-line" />}
 
-          {issue.solution && (
-            <div className="mb-6">
-              <p className="text-xs font-semibold text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-2">How to fix it</p>
-              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-ctp-blue/30 rounded p-4 text-sm leading-relaxed text-gray-700 dark:text-ctp-subtext0">
-                {issue.solution}
-              </div>
-            </div>
-          )}
+        {issue.solution && (
+          <section className="px-6 py-5 border-b border-line">
+            <h3 className="label mb-2 flex items-center gap-1.5">
+              <Lightbulb className="w-4 h-4 text-warning" aria-hidden="true" /> How to fix it
+            </h3>
+            <p className="text-sm leading-relaxed text-fg max-w-prose">{issue.solution}</p>
+          </section>
+        )}
 
-          <div className="border-t border-gray-200 dark:border-ctp-surface1 pt-4">
-            {canFix ? (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleApply}
-                  disabled={fixing}
-                  className="px-4 py-2 text-sm font-medium bg-green-600 text-white dark:bg-ctp-green dark:text-ctp-base rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
-                >
-                  {fixing ? 'Applying...' : 'Apply Fix'}
+        <footer className="px-6 py-4 bg-subtle/50">
+          {canFix ? (
+            <div className="flex items-center gap-2">
+              <button onClick={handleApply} disabled={fixing} className="btn-primary">
+                {fixing ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
+                {fixing ? 'Applying…' : `Run ${issue.rule}`}
+              </button>
+              {fixResult?.backup && (
+                <button onClick={handleUndo} className="btn-secondary">
+                  <Undo2 className="w-4 h-4" /> Undo
                 </button>
-                {fixResult?.backup && (
-                  <button onClick={handleUndo}
-                    className="px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-ctp-surface1 text-gray-700 dark:text-ctp-text rounded hover:bg-gray-300 dark:hover:bg-ctp-surface0 transition-colors">
-                    Undo
-                  </button>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400 dark:text-ctp-subtext1">Auto-fix not available for this issue type.</p>
-            )}
-            {fixResult && (
-              <div className={`mt-3 px-4 py-2 rounded text-sm ${
-                fixResult.applied
-                  ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-ctp-green'
-                  : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-ctp-red'
-              }`}>
-                {fixResult.message}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-fg-muted">No automatic fix for this rule. Fix it in your editor and re-run the scan.</p>
+          )}
+          {fixResult && (
+            <p className={`mt-3 px-3 py-2 rounded-md text-sm ${fixResult.applied ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger'}`}>
+              {fixResult.message}
+            </p>
+          )}
+        </footer>
+      </article>
     </div>
   )
 }

@@ -31,6 +31,7 @@ func (s *TestScanner) Name() string {
 
 var (
 	testResultRe = regexp.MustCompile(`^(?:\s*)(?:=== RUN|--- (?:PASS|FAIL|SKIP):)\s+(.+?)(?:\s+\((\d+\.\d+)s\))?$`)
+	testCoverRe  = regexp.MustCompile(`^coverage: (\d+\.\d+)% of statements`)
 	testPkgRe    = regexp.MustCompile(`^(ok|FAIL|\?)\s+(\S+)\s+(?:(\d+\.\d+)s)?(?:\s+coverage:\s+(\d+\.\d+)%)?`)
 )
 
@@ -47,17 +48,6 @@ func (s *TestScanner) Run(ctx context.Context, cfg *config.Config, progress chan
 	defer cancel()
 
 	testResult := s.runTests(ctx, projectDir)
-	coverageResult := s.runCoverage(ctx, projectDir)
-	if coverageResult != nil {
-		for i := range testResult.Packages {
-			for _, cp := range coverageResult.Packages {
-				if cp.Name == testResult.Packages[i].Name {
-					testResult.Packages[i].Coverage = cp.Coverage
-					break
-				}
-			}
-		}
-	}
 
 	s.locateTestFileLocations(projectDir, testResult)
 	issues := s.issuesFromTestResult(testResult)
@@ -72,7 +62,9 @@ func (s *TestScanner) Run(ctx context.Context, cfg *config.Config, progress chan
 }
 
 func (s *TestScanner) runTests(ctx context.Context, projectDir string) *model.TestResult {
-	cmd := exec.CommandContext(ctx, "go", "test", "-v", "-count=1", "./...")
+	// -cover adds "coverage: N%" to each package summary line, so results and
+	// coverage come from a single run.
+	cmd := exec.CommandContext(ctx, "go", "test", "-v", "-cover", "-count=1", "./...")
 	cmd.Dir = projectDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -84,22 +76,12 @@ func (s *TestScanner) runTests(ctx context.Context, projectDir string) *model.Te
 	return parseTestOutput(string(output))
 }
 
-func (s *TestScanner) runCoverage(ctx context.Context, projectDir string) *model.TestResult {
-	cmd := exec.CommandContext(ctx, "go", "test", "-cover", "-count=1", "./...")
-	cmd.Dir = projectDir
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		if len(output) == 0 {
-			return nil
-		}
-	}
-
-	return parseCoverageOutput(string(output))
-}
-
 func parseTestOutput(output string) *model.TestResult {
 	result := &model.TestResult{Packages: []model.TestPackage{}}
 	var pendingTest *model.Test
+	// With -v, coverage is printed on its own line before the package summary;
+	// failing packages omit it from the summary, so remember it here.
+	var lastCoverage float64
 	pkgMap := make(map[string]*model.TestPackage)
 	unknownKey := "_unknown_"
 
@@ -147,6 +129,13 @@ func parseTestOutput(output string) *model.TestResult {
 			continue
 		}
 
+		if matches := testCoverRe.FindStringSubmatch(line); matches != nil {
+			if c, err := strconv.ParseFloat(matches[1], 64); err == nil {
+				lastCoverage = c
+			}
+			continue
+		}
+
 		if matches := testPkgRe.FindStringSubmatch(line); matches != nil {
 			status := matches[1]
 			pkgName := matches[2]
@@ -171,11 +160,13 @@ func parseTestOutput(output string) *model.TestResult {
 					pkg.Duration = time.Duration(d * float64(time.Second))
 				}
 			}
+			pkg.Coverage = lastCoverage
 			if len(matches) > 4 && matches[4] != "" {
 				if c, err := strconv.ParseFloat(matches[4], 64); err == nil {
 					pkg.Coverage = c
 				}
 			}
+			lastCoverage = 0
 
 			if status == "?" {
 				result.Total.Skipped++
@@ -205,33 +196,6 @@ func parseTestOutput(output string) *model.TestResult {
 		}
 	}
 
-	return result
-}
-
-func parseCoverageOutput(output string) *model.TestResult {
-	result := &model.TestResult{}
-	scanner := bufio.NewScanner(strings.NewReader(output))
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if matches := testPkgRe.FindStringSubmatch(line); matches != nil {
-			pkgName := matches[2]
-			var coverage float64
-			if len(matches) > 4 && matches[4] != "" {
-				if c, err := strconv.ParseFloat(matches[4], 64); err == nil {
-					coverage = c
-				}
-			}
-			result.Packages = append(result.Packages, model.TestPackage{
-				Name:     pkgName,
-				Coverage: coverage,
-				Tests:    []model.Test{},
-			})
-			if coverage > 0 {
-				result.Total.Total++
-			}
-		}
-	}
 	return result
 }
 

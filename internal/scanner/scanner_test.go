@@ -121,15 +121,38 @@ func TestParseTestOutput_Empty(t *testing.T) {
 	}
 }
 
-func TestParseCoverageOutput(t *testing.T) {
-	result := parseCoverageOutput("ok  \ttest\t0.123s\tcoverage: 75.5% of statements")
-	if len(result.Packages) == 0 || result.Packages[0].Coverage != 75.5 {
-		t.Errorf("expected 75.5 coverage, got %f", result.Packages[0].Coverage)
+func TestParseTestOutput_WithCoverage(t *testing.T) {
+	output := "=== RUN   TestAdd\n--- PASS: TestAdd (0.00s)\nPASS\ncoverage: 75.5% of statements\nok  \texample.com/math\t0.123s\tcoverage: 75.5% of statements\n"
+	result := parseTestOutput(output)
+	if len(result.Packages) != 1 {
+		t.Fatalf("expected 1 package, got %d", len(result.Packages))
+	}
+	pkg := result.Packages[0]
+	if pkg.Name != "example.com/math" || pkg.Coverage != 75.5 {
+		t.Errorf("expected example.com/math with 75.5 coverage, got %s with %f", pkg.Name, pkg.Coverage)
+	}
+	if result.Total.Passed != 1 {
+		t.Errorf("expected 1 passed test, got %d", result.Total.Passed)
 	}
 }
 
-func TestParseCoverageOutput_Missing(t *testing.T) {
-	result := parseCoverageOutput("ok  test  0.1s")
+func TestParseTestOutput_FailingPackageCoverage(t *testing.T) {
+	output := "=== RUN   TestBad\n--- FAIL: TestBad (0.00s)\nFAIL\ncoverage: 100.0% of statements\nFAIL\texample.com/bad\t0.383s\nok  \texample.com/good\t0.1s\n"
+	result := parseTestOutput(output)
+	cov := map[string]float64{}
+	for _, p := range result.Packages {
+		cov[p.Name] = p.Coverage
+	}
+	if cov["example.com/bad"] != 100 {
+		t.Errorf("expected 100 coverage for failing package, got %f", cov["example.com/bad"])
+	}
+	if cov["example.com/good"] != 0 {
+		t.Errorf("coverage leaked into next package: %f", cov["example.com/good"])
+	}
+}
+
+func TestParseTestOutput_NoCoverage(t *testing.T) {
+	result := parseTestOutput("ok  test  0.1s")
 	if len(result.Packages) != 1 {
 		t.Fatalf("expected 1 package, got %d", len(result.Packages))
 	}
@@ -607,5 +630,24 @@ BenchmarkDivide-8   	30000000	        40.12 ns/op	       0 B/op	       0 allocs/
 	b.ResetTimer()
 	for range b.N {
 		parseBenchOutput(output)
+	}
+}
+
+type stubScanner struct{ name string }
+
+func (s stubScanner) Name() string { return s.name }
+func (s stubScanner) Run(context.Context, *config.Config, chan<- ProgressEvent) (*Result, error) {
+	return &Result{ScannerName: s.name}, nil
+}
+
+func TestPipelineFilterEnabled(t *testing.T) {
+	p := NewPipeline(stubScanner{"lint"}, stubScanner{"bench"}, stubScanner{"git"})
+	got := p.filterEnabled(&config.Config{DisabledScanners: []string{"bench"}})
+	if len(got) != 2 || got[0].Name() != "lint" || got[1].Name() != "git" {
+		names := make([]string, len(got))
+		for i, s := range got {
+			names[i] = s.Name()
+		}
+		t.Errorf("expected [lint git], got %v", names)
 	}
 }

@@ -18,8 +18,10 @@ func NewGitScanner() *GitScanner {
 	return &GitScanner{}
 }
 
+const gitScannerName = "git"
+
 func (s *GitScanner) Name() string {
-	return "git"
+	return gitScannerName
 }
 
 func (s *GitScanner) Run(ctx context.Context, cfg *config.Config, progress chan<- ProgressEvent) (*Result, error) {

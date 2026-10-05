@@ -1,31 +1,42 @@
-// Single source of truth for color-scheme/appearance state, shared between
-// the quick-access ThemeSwitcher (top bar) and the full Config page so the
-// two never drift out of sync.
+// Light/dark mode. "system" follows the OS setting and is the default; an
+// explicit choice is remembered in localStorage. index.html applies the same
+// logic before first paint to avoid a flash of the wrong mode.
 
-export interface ThemeOption {
-  id: string
-  label: string
+export type ThemeMode = 'light' | 'dark' | 'system'
+
+const KEY = 'gopolice-theme'
+const media = () => window.matchMedia('(prefers-color-scheme: dark)')
+
+export function getThemeMode(): ThemeMode {
+  try {
+    const v = localStorage.getItem(KEY)
+    if (v === 'light' || v === 'dark') return v
+  } catch {
+    // storage unavailable: fall through to system
+  }
+  return 'system'
 }
 
-export const themes: ThemeOption[] = [
-  { id: 'catppuccin', label: 'Catppuccin' },
-  { id: 'nord', label: 'Nord' },
-  { id: 'dracula', label: 'Dracula' },
-  { id: 'gruvbox', label: 'Gruvbox' },
-]
-
-export function getScheme(): string {
-  return localStorage.getItem('scheme') || 'catppuccin'
+function resolve(mode: ThemeMode): boolean {
+  return mode === 'dark' || (mode === 'system' && media().matches)
 }
 
-export function getDark(): boolean {
-  return localStorage.getItem('dark') === 'true' ||
-    (localStorage.getItem('dark') === null && window.matchMedia('(prefers-color-scheme: dark)').matches)
+export function applyThemeMode(mode: ThemeMode) {
+  document.documentElement.classList.toggle('dark', resolve(mode))
+  try {
+    if (mode === 'system') localStorage.removeItem(KEY)
+    else localStorage.setItem(KEY, mode)
+  } catch {
+    // ignore: the choice just won't persist
+  }
 }
 
-export function applyScheme(scheme: string, dark: boolean) {
-  document.documentElement.setAttribute('data-theme', scheme)
-  document.documentElement.classList.toggle('dark', dark)
-  localStorage.setItem('scheme', scheme)
-  localStorage.setItem('dark', String(dark))
+/** Re-applies the mode when the OS setting changes while in "system" mode. */
+export function watchSystemTheme(): () => void {
+  const m = media()
+  const onChange = () => {
+    if (getThemeMode() === 'system') applyThemeMode('system')
+  }
+  m.addEventListener('change', onChange)
+  return () => m.removeEventListener('change', onChange)
 }

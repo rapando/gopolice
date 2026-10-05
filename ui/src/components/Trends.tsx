@@ -50,9 +50,9 @@ export default function Trends() {
   if (loading) {
     return (
       <div className="mt-8">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-ctp-subtext1 uppercase tracking-wide mb-4">Trends</h3>
-        <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded p-8 text-center">
-          <p className="text-gray-400 dark:text-ctp-subtext0 text-sm">Loading trends...</p>
+        <h3 className="text-sm font-semibold text-fg uppercase tracking-wide mb-4">Trends</h3>
+        <div className="bg-surface border border-line rounded p-8 text-center">
+          <p className="text-fg-subtle text-sm">Loading trends...</p>
         </div>
       </div>
     )
@@ -98,7 +98,7 @@ export default function Trends() {
   return (
     <div className="mt-8">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-ctp-subtext1 uppercase tracking-wide">Trends</h3>
+        <h3 className="text-sm font-semibold text-fg uppercase tracking-wide">Trends</h3>
         <div className="flex items-center gap-1">
           {ranges.map((r) => (
             <button
@@ -107,8 +107,8 @@ export default function Trends() {
               aria-pressed={range === r.key}
               className={`px-2.5 py-1 text-xs rounded transition-colors ${
                 range === r.key
-                  ? 'bg-blue-100 text-blue-700 dark:bg-ctp-surface1 dark:text-ctp-lavender'
-                  : 'text-gray-500 hover:text-gray-700 dark:text-ctp-subtext0 dark:hover:text-ctp-text'
+                  ? 'bg-accent-soft text-accent'
+                  : 'text-fg-muted hover:text-fg'
               }`}
             >
               {r.label}
@@ -117,8 +117,8 @@ export default function Trends() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded overflow-hidden">
-        <div className="flex border-b border-gray-200 dark:border-ctp-surface1" role="tablist">
+      <div className="bg-surface border border-line rounded overflow-hidden">
+        <div className="flex border-b border-line" role="tablist">
           {tabs.map((t) => (
             <button
               key={t.key}
@@ -128,8 +128,8 @@ export default function Trends() {
               aria-controls={`trends-panel-${t.key}`}
               className={`px-4 py-2 text-xs font-medium transition-colors ${
                 activeChart === t.key
-                  ? 'text-blue-600 border-b-2 border-blue-500 dark:text-ctp-lavender dark:border-ctp-lavender'
-                  : 'text-gray-500 hover:text-gray-700 dark:text-ctp-subtext0 dark:hover:text-ctp-text'
+                  ? 'text-accent border-b-2 border-accent'
+                  : 'text-fg-muted hover:text-fg'
               }`}
             >
               {t.label}
@@ -146,9 +146,9 @@ export default function Trends() {
                 <YAxis tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} allowDecimals={false} />
                 <Tooltip {...tooltipStyle} />
                 <Legend wrapperStyle={{ fontSize: 12, color: colors.text }} />
-                <Line type="monotone" dataKey="Errors" stroke={colors.red} strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="Warnings" stroke={colors.yellow} strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="Infos" stroke={colors.blue} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="Errors" stroke={colors.danger} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="Warnings" stroke={colors.warning} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="Infos" stroke={colors.info} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -160,7 +160,7 @@ export default function Trends() {
                 <XAxis dataKey="ts" tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} />
                 <YAxis domain={[0.5, 5.5]} ticks={[1, 2, 3, 4, 5]} tickFormatter={(v: any) => ['', 'F', 'D', 'C', 'B', 'A'][v] ?? ''} tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} />
                 <Tooltip {...tooltipStyle} />
-                <Line type="stepAfter" dataKey="Grade" stroke={colors.mauve} strokeWidth={2} dot={{ r: 4 }} />
+                <Line type="stepAfter" dataKey="Grade" stroke={colors.accent} strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -172,7 +172,7 @@ export default function Trends() {
                 <XAxis dataKey="ts" tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} unit="%" />
                 <Tooltip {...tooltipStyle} formatter={(v: any) => [`${v}%`, 'Coverage']} />
-                <Line type="monotone" dataKey="Coverage" stroke={colors.green} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="Coverage" stroke={colors.good} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -184,7 +184,7 @@ export default function Trends() {
                 <XAxis dataKey="ts" tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} />
                 <YAxis tick={{ fontSize: 11, fill: colors.muted }} stroke={colors.muted} unit=" ns" />
                 <Tooltip {...tooltipStyle} formatter={(v: any) => [`${(v ?? 0).toLocaleString()} ns/op`, 'Avg']} />
-                <Line type="monotone" dataKey="ns/op" stroke={colors.peach} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="ns/op" stroke={colors.series[1]} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           )}

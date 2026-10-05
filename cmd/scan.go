@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
 	"runtime"
+	"strconv"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/rapando/gopolice/internal/api"
+	"github.com/rapando/gopolice/internal/cache"
 	"github.com/rapando/gopolice/internal/config"
 	"github.com/rapando/gopolice/internal/exporter"
 	"github.com/rapando/gopolice/internal/history"
@@ -57,9 +56,28 @@ Use --output to write results in a machine-readable format to stdout:
 }
 
 func runScanAndOutput(c *cobra.Command, cfg *config.Config, outputFmt string) error {
-	ctx, cancel := context.WithCancel(context.Background())
+	if outputFmt != "sarif" && outputFmt != "json" {
+		return fmt.Errorf("unsupported output format: %s (supported: sarif, json)", outputFmt)
+	}
+
+	ctx, cancel := signalContext()
 	defer cancel()
 
+	result, err := runScanInternal(ctx, cfg, printProgress(c))
+	if err != nil {
+		return err
+	}
+
+	if outputFmt == "sarif" {
+		return exporter.ExportSARIF(result, GetVersion(), os.Stdout)
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(result)
+}
+
+// printProgress returns a channel whose events are printed to stderr.
+func printProgress(c *cobra.Command) chan scanner.ProgressEvent {
 	progress := make(chan scanner.ProgressEvent, 100)
 	go func() {
 		for event := range progress {
@@ -71,26 +89,12 @@ func runScanAndOutput(c *cobra.Command, cfg *config.Config, outputFmt string) er
 			}
 		}
 	}()
-
-	result, err := runScanInternal(ctx, cfg, progress)
-	if err != nil {
-		return err
-	}
-
-	switch outputFmt {
-	case "sarif":
-		return exporter.ExportSARIF(result, GetVersion(), os.Stdout)
-	case "json":
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(result)
-	default:
-		return fmt.Errorf("unsupported output format: %s (supported: sarif, json)", outputFmt)
-	}
+	return progress
 }
 
+// runScanInternal scans the project and persists the result to the cache
+// (read by `gopolice serve`) and to history.
 func runScanInternal(ctx context.Context, cfg *config.Config, progress chan scanner.ProgressEvent) (*model.ScanResult, error) {
-
 	result, err := scanner.RunWorkspaceScan(ctx, cfg, progress)
 	if err != nil {
 		return nil, fmt.Errorf("scan failed: %w", err)
@@ -106,6 +110,9 @@ func runScanInternal(ctx context.Context, cfg *config.Config, progress chan scan
 		return nil, fmt.Errorf("scan produced no result")
 	}
 
+	if err := cache.Save(result, cache.ResultPath(cfg.TargetDir)); err != nil {
+		fmt.Fprintf(os.Stderr, "cache save: %v\n", err)
+	}
 	if err := history.Save(cfg.TargetDir, result); err != nil {
 		fmt.Fprintf(os.Stderr, "history save: %v\n", err)
 	}
@@ -113,87 +120,30 @@ func runScanInternal(ctx context.Context, cfg *config.Config, progress chan scan
 }
 
 func runScanAndServe(c *cobra.Command, cfg *config.Config, noOpen bool) error {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signalContext()
 	defer cancel()
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	c.PrintErr("gopolice scan starting...\n")
 
 	server := api.NewServer(cfg, uiFS, GetVersion())
-	uiPort := cfg.Port
-	if uiPort == 0 {
-		uiPort = 9393
-	}
-
-	portCh := make(chan int, 1)
-	go func() {
-		actualPort, err := server.Start(uiPort)
-		if err != nil {
-			c.PrintErr(fmt.Sprintf("Server error: %v\n", err))
-			close(portCh)
-			return
-		}
-		portCh <- actualPort
-		c.PrintErr(fmt.Sprintf("Web UI at http://localhost:%d\n", actualPort))
-	}()
-
-	var actualPort int
-	select {
-	case actualPort = <-portCh:
-	case <-time.After(500 * time.Millisecond):
-		actualPort = uiPort
+	port, err := startServer(c, server, cfg.Port)
+	if err != nil {
+		return err
 	}
 	if !noOpen {
-		openBrowser(fmt.Sprintf("http://localhost:%d", actualPort))
+		openBrowser(fmt.Sprintf("http://localhost:%d", port))
 	}
 
-	progress := make(chan scanner.ProgressEvent, 100)
-	go func() {
-		for event := range progress {
-			msg := fmt.Sprintf("[%s] %s", event.Scanner, event.Message)
-			if event.Status == scanner.StatusFailed {
-				c.PrintErr("ERROR: ", msg, "\n")
-			} else {
-				c.PrintErr(msg, "\n")
-			}
-		}
-	}()
+	result, err := runScanInternal(ctx, cfg, printProgress(c))
+	if err != nil {
+		_ = shutdownServer(c, server)
+		return err
+	}
+	c.PrintErrf("Scan complete: %d issues found in %v\n", len(result.Issues), result.Duration)
+	server.SetResult(result)
 
-	resultCh := make(chan struct{})
-	go func() {
-		result, err := scanner.RunWorkspaceScan(ctx, cfg, progress)
-		if err != nil {
-			c.PrintErr(fmt.Sprintf("Scan failed: %v\n", err))
-			close(resultCh)
-			return
-		}
-		if result == nil {
-			p := scanner.NewDefaultPipeline()
-			result, err = p.Run(ctx, cfg, progress)
-			if err != nil {
-				c.PrintErr(fmt.Sprintf("Scan failed: %v\n", err))
-				close(resultCh)
-				return
-			}
-		}
-		c.PrintErr(fmt.Sprintf("Scan complete: %d issues found in %v\n", len(result.Issues), result.Duration))
-
-		if err := history.Save(cfg.TargetDir, result); err != nil {
-			c.PrintErr(fmt.Sprintf("history save: %v\n", err))
-		}
-
-		server.SetResult(result)
-
-		<-sigCh
-		c.PrintErr("Shutting down...\n")
-		cancel()
-		close(resultCh)
-	}()
-
-	<-resultCh
-	return nil
+	<-ctx.Done()
+	return shutdownServer(c, server)
 }
 
 func openBrowser(url string) {
@@ -270,7 +220,7 @@ func portOfURL(raw string) string {
 	if i := strings.LastIndex(raw, ":"); i >= 0 {
 		return raw[i+1:]
 	}
-	return "9393"
+	return strconv.Itoa(config.DefaultPort)
 }
 
 func execSilent(name string, args ...string) error {

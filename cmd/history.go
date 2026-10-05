@@ -1,12 +1,7 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	"github.com/rapando/gopolice/internal/api"
 	"github.com/rapando/gopolice/internal/config"
@@ -33,28 +28,22 @@ func NewHistoryCommand() *cobra.Command {
 				return fmt.Errorf("list history: %w", err)
 			}
 
-			server := api.NewServer(cfg, uiFS, GetVersion())
 			if port > 0 {
 				cfg.Port = port
 			}
-			uiPort := cfg.Port
-			if uiPort == 0 {
-				uiPort = 9393
-			}
 
-			actualPort, err := server.Start(uiPort)
+			ctx, cancel := signalContext()
+			defer cancel()
+
+			server := api.NewServer(cfg, uiFS, GetVersion())
+			actualPort, err := startServer(c, server, cfg.Port)
 			if err != nil {
 				return err
 			}
 			openBrowser(fmt.Sprintf("http://localhost:%d", actualPort))
-			fmt.Fprintf(os.Stderr, "Web UI at http://localhost:%d\n", actualPort)
-			// block until signal
-			sigCh := make(chan os.Signal, 1)
-			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-			<-sigCh
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer shutdownCancel()
-			return server.Shutdown(shutdownCtx)
+
+			<-ctx.Done()
+			return shutdownServer(c, server)
 		},
 	}
 

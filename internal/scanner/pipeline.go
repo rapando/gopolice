@@ -52,7 +52,7 @@ func (p *Pipeline) Run(ctx context.Context, cfg *config.Config, progress chan<- 
 		Issues:   make([]model.Issue, 0),
 	}
 
-	enabledScanners := p.filterEnabled()
+	enabledScanners := p.filterEnabled(cfg)
 
 	for _, s := range enabledScanners {
 		select {
@@ -143,8 +143,14 @@ func (p *Pipeline) normalizePaths(result *model.ScanResult, cfg *config.Config) 
 	}
 }
 
-func (p *Pipeline) filterEnabled() []Scanner {
-	return p.scanners
+func (p *Pipeline) filterEnabled(cfg *config.Config) []Scanner {
+	enabled := make([]Scanner, 0, len(p.scanners))
+	for _, s := range p.scanners {
+		if cfg.ScannerEnabled(s.Name()) {
+			enabled = append(enabled, s)
+		}
+	}
+	return enabled
 }
 
 func moduleName(dir string) string {

@@ -1,139 +1,166 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
+import { Check } from 'lucide-react'
 import { getGlobalConfig, updateGlobalConfig } from '../api/client'
-import { themes, getScheme, getDark, applyScheme } from '../lib/theme'
+import ThemeToggle from '../components/ThemeToggle'
+import { editors, getEditor, setEditor, type Editor } from '../lib/editor'
+
+// Scanner names as reported by the Go pipeline (Scanner.Name()).
+const SCANNERS: { name: string; label: string; desc: string }[] = [
+  { name: 'lint', label: 'Lint', desc: 'golangci-lint, or go vet when it is not installed' },
+  { name: 'security', label: 'Security', desc: 'gosec and govulncheck' },
+  { name: 'tests', label: 'Tests', desc: 'go test with coverage' },
+  { name: 'benchmarks', label: 'Benchmarks', desc: 'go test -bench; slow on large suites' },
+  { name: 'profile', label: 'Profiling', desc: 'CPU and memory profiles of benchmarks; slow' },
+  { name: 'deadcode', label: 'Dead code', desc: 'staticcheck U1000' },
+  { name: 'complexity', label: 'Complexity', desc: 'Cyclomatic complexity per function' },
+  { name: 'depgraph', label: 'Dependency graph', desc: 'go mod graph' },
+  { name: 'filestats', label: 'File stats', desc: 'Line counts' },
+  { name: 'git', label: 'Git', desc: 'Branch, authors and commits' },
+]
+
+interface GlobalConfig {
+  port: number
+  disabled_scanners?: string[]
+}
 
 export default function ConfigPage() {
-  const [form, setForm] = useState<any>(null)
+  const [form, setForm] = useState<GlobalConfig | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [scheme, setScheme] = useState(getScheme)
-  const [dark, setDark] = useState(getDark)
+  const [error, setError] = useState('')
+  const [editor, setEditorState] = useState<Editor>(getEditor)
 
   useEffect(() => {
-    getGlobalConfig().then((c) => { setForm(c) }).catch(() => {})
+    getGlobalConfig().then(setForm).catch((e) => setError(String(e.message ?? e)))
   }, [])
 
-  const handleSchemeChange = (id: string) => {
-    setScheme(id)
-    applyScheme(id, dark)
-  }
-
-  const toggleDark = () => {
-    const next = !dark
-    setDark(next)
-    applyScheme(scheme, next)
-  }
-
   const handleSave = async () => {
+    if (!form) return
     setSaving(true)
+    setError('')
     try {
       await updateGlobalConfig(form)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
-    } catch {}
+    } catch (e: any) {
+      setError(e.message ?? String(e))
+    }
     setSaving(false)
   }
 
-  if (!form) {
-    return (
-      <div className="max-w-4xl mx-auto p-8">
-        <h2 className="text-lg font-bold text-gray-800 mb-5 dark:text-ctp-text">Config</h2>
-        <div className="card p-8 text-center">
-          <p className="text-gray-500 dark:text-ctp-subtext0">Loading...</p>
-        </div>
-      </div>
-    )
+  const disabled = new Set(form?.disabled_scanners ?? [])
+  const toggleScanner = (name: string) => {
+    if (!form) return
+    const next = new Set(disabled)
+    if (next.has(name)) next.delete(name)
+    else next.add(name)
+    setForm({ ...form, disabled_scanners: SCANNERS.map((s) => s.name).filter((n) => next.has(n)) })
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-8">
-      <div className="flex items-center justify-between mb-5">
-        <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text">Config</h2>
-        <div className="flex items-center gap-3">
-          {saved && <span className="text-xs text-green-600 dark:text-ctp-green font-medium">Saved</span>}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-1.5 text-sm font-medium bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-100 disabled:text-gray-400 transition-colors dark:bg-ctp-green dark:text-ctp-base dark:hover:bg-ctp-teal dark:disabled:bg-ctp-surface1 dark:disabled:text-ctp-overlay0"
+    <div className="max-w-3xl mx-auto p-8 space-y-6">
+      <Section title="Appearance" desc="Stored in this browser.">
+        <Row label="Theme" desc="System follows your OS setting.">
+          <ThemeToggle />
+        </Row>
+        <Row label="Open files in" desc="Used by the open-in-editor buttons next to file paths.">
+          <select
+            value={editor}
+            onChange={(e) => {
+              const v = e.target.value as Editor
+              setEditorState(v)
+              setEditor(v)
+            }}
+            className="input w-40"
           >
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </div>
+            {editors.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+          </select>
+        </Row>
+      </Section>
 
-      <div className="card overflow-hidden">
-        <div className="px-6 py-5 space-y-5">
-          <Field label="Port" desc="Web UI port number" value={form.port} onChange={(v) => setForm({ ...form, port: parseInt(v) || 9393 })} type="number" />
-
-          <hr className="border-gray-200 dark:border-ctp-surface1" />
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-ctp-subtext0 mb-1">Color Scheme</label>
-            <p className="text-xs text-gray-400 dark:text-ctp-subtext1 mb-2">Choose a color palette for the UI</p>
-            <div className="flex flex-wrap gap-2">
-              {themes.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => handleSchemeChange(t.id)}
-                  aria-pressed={scheme === t.id}
-                  className={`px-4 py-2 text-sm rounded border transition-colors ${
-                    scheme === t.id
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-ctp-lavender dark:bg-ctp-base dark:text-ctp-lavender'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-ctp-surface1 dark:text-ctp-subtext0 dark:hover:bg-ctp-surface0'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <hr className="border-gray-200 dark:border-ctp-surface1" />
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-ctp-subtext0 mb-1">Appearance</label>
-            <p className="text-xs text-gray-400 dark:text-ctp-subtext1 mb-2">Toggle between light and dark mode</p>
-            <button
-              onClick={toggleDark}
-              aria-pressed={dark}
-              className="flex items-center gap-2 px-4 py-2 text-sm rounded border border-gray-300 dark:border-ctp-surface1 hover:bg-gray-50 dark:hover:bg-ctp-surface0 transition-colors text-gray-700 dark:text-ctp-subtext0"
-            >
-              {dark ? (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                  Switch to Light Mode
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
-                  Switch to Dark Mode
-                </>
-              )}
+      <Section
+        title="Scan settings"
+        desc={<>Saved to <code className="font-mono text-xs">~/.config/gopolice/config.yaml</code>. Applies to the next <code className="font-mono text-xs">gopolice</code> run.</>}
+        action={
+          <div className="flex items-center gap-3">
+            {saved && (
+              <span className="inline-flex items-center gap-1 text-sm text-success">
+                <Check className="w-4 h-4" aria-hidden="true" /> Saved
+              </span>
+            )}
+            <button onClick={handleSave} disabled={saving || !form} className="btn-primary">
+              {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
-        </div>
-      </div>
+        }
+      >
+        {error && <p className="text-sm text-danger">{error}</p>}
+        {!form ? (
+          <p className="text-sm text-fg-muted">Loading…</p>
+        ) : (
+          <>
+            <Row label="Port" desc="Web UI port. The next free port is used if it is taken.">
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                value={form.port}
+                onChange={(e) => setForm({ ...form, port: parseInt(e.target.value) || 9393 })}
+                className="input w-28 font-mono"
+              />
+            </Row>
+            <div>
+              <p className="text-sm font-medium">Scanners</p>
+              <p className="text-sm text-fg-muted mb-3">Turn off scanners you don't need to make scans faster.</p>
+              <ul className="grid sm:grid-cols-2 gap-2">
+                {SCANNERS.map((s) => (
+                  <li key={s.name}>
+                    <label className="flex items-start gap-3 p-3 rounded-md border border-line hover:bg-subtle cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!disabled.has(s.name)}
+                        onChange={() => toggleScanner(s.name)}
+                        className="mt-0.5 w-4 h-4"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium">{s.label}</span>
+                        <span className="block text-xs text-fg-muted">{s.desc}</span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+      </Section>
     </div>
   )
 }
 
-function Field({ label, desc, value, onChange, type }: {
-  label: string; desc?: string; value?: any; onChange: (v: string) => void; type?: string
-}) {
+function Section({ title, desc, action, children }: { title: string; desc?: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 dark:text-ctp-subtext0 mb-1">{label}</label>
-      {desc && <p className="text-xs text-gray-400 dark:text-ctp-subtext1 mb-1.5">{desc}</p>}
-      <input
-        type={type || 'text'}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
-        className="input w-full max-w-md"
-      />
+    <section className="card">
+      <header className="px-6 py-4 border-b border-line flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold">{title}</h2>
+          {desc && <p className="text-sm text-fg-muted mt-0.5">{desc}</p>}
+        </div>
+        {action}
+      </header>
+      <div className="px-6 py-5 space-y-5">{children}</div>
+    </section>
+  )
+}
+
+function Row({ label, desc, children }: { label: string; desc?: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-6">
+      <div className="min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        {desc && <p className="text-sm text-fg-muted">{desc}</p>}
+      </div>
+      <div className="shrink-0">{children}</div>
     </div>
   )
 }
