@@ -1,8 +1,9 @@
-import { useRef, useEffect, useState, useMemo } from 'react'
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react'
+import * as d3 from 'd3'
+import { ArrowLeft, ArrowRight, Maximize, Search, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { DepGraph as DepGraphData } from '../api/client'
 import { useThemeColors } from '../hooks/useThemeColors'
 import EmptyState from '../components/EmptyState'
-import * as d3 from 'd3'
 
 interface Props {
   depGraph: DepGraphData | null
@@ -27,31 +28,35 @@ function extractShortName(full: string): string {
   return parts[parts.length - 1] || nameOnly
 }
 
+function linkEnds(d: GraphLink): [string, string] {
+  const src = typeof d.source === 'string' ? d.source : d.source.id
+  const tgt = typeof d.target === 'string' ? d.target : d.target.id
+  return [src, tgt]
+}
+
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+
 export default function DepGraph({ depGraph, onScan, scanning }: Props) {
   const colors = useThemeColors()
   const svgRef = useRef<SVGSVGElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [showPanel, setShowPanel] = useState(false)
   const [matchCount, setMatchCount] = useState<number | null>(null)
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null)
   const nodeGroupRef = useRef<d3.Selection<SVGGElement, GraphNode, SVGGElement, unknown> | null>(null)
   const linkRef = useRef<d3.Selection<SVGLineElement, GraphLink, SVGGElement, unknown> | null>(null)
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
-  const dimsRef = useRef({ width: 0, height: 0 })
+  const nodesRef = useRef<GraphNode[]>([])
 
-  const edges = depGraph?.edges ?? []
+  const edges = useMemo(() => depGraph?.edges ?? [], [depGraph])
+
   const allNodes = useMemo(() => {
-    if (!edges.length) return []
-    const rootModules = new Set(edges.map((e) => e.from))
-    const depModules = new Set(edges.map((e) => e.to))
-    const nodeIds = new Set([...rootModules, ...depModules])
-    return Array.from(nodeIds).map((id) => ({
-      id,
-      isRoot: rootModules.has(id) && !depModules.has(id),
-    }))
+    const from = new Set(edges.map((e) => e.from))
+    const to = new Set(edges.map((e) => e.to))
+    return Array.from(new Set([...from, ...to])).map((id) => ({ id, isRoot: from.has(id) && !to.has(id) }))
   }, [edges])
 
   const outgoing = useMemo(() => {
@@ -79,30 +84,39 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
     dependents: incoming.get(selected) ?? [],
   } : null
 
+  /** Zooms so the given nodes (default: all) fill the view. */
+  const fitTo = useCallback((nodes: GraphNode[], duration = 450) => {
+    const svgEl = svgRef.current
+    if (!svgEl || !zoomRef.current || nodes.length === 0) return
+    const { width, height } = svgEl.getBoundingClientRect()
+    const xs = nodes.map((d) => d.x ?? 0)
+    const ys = nodes.map((d) => d.y ?? 0)
+    const minX = Math.min(...xs), maxX = Math.max(...xs)
+    const minY = Math.min(...ys), maxY = Math.max(...ys)
+    const pad = 60
+    const scale = Math.min(2.5, Math.max(0.1, Math.min(width / (maxX - minX + pad * 2), height / (maxY - minY + pad * 2))))
+    const t = d3.zoomIdentity.translate(width / 2, height / 2).scale(scale).translate(-(minX + maxX) / 2, -(minY + maxY) / 2)
+    d3.select(svgEl).transition().duration(duration).call(zoomRef.current.transform, t)
+  }, [])
+
+  const zoomBy = (k: number) => {
+    if (!svgRef.current || !zoomRef.current) return
+    d3.select(svgRef.current).transition().duration(200).call(zoomRef.current.scaleBy, k)
+  }
+
   useEffect(() => {
-    if (!depGraph || !edges.length || !svgRef.current) return
+    if (!edges.length || !svgRef.current) return
 
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
 
-    const width = svgRef.current.clientWidth
-    const height = Math.max(700, window.innerHeight - 200)
-    dimsRef.current = { width, height }
+    const { width, height } = svgRef.current.getBoundingClientRect()
 
-    svg.attr('viewBox', `0 0 ${width} ${height}`)
-
-    const rootModules = new Set(edges.map((e) => e.from))
-    const depModules = new Set(edges.map((e) => e.to))
-
-    const nodeIds = new Set([...rootModules, ...depModules])
-    const nodes: GraphNode[] = Array.from(nodeIds).map((id) => ({
-      id,
-      isRoot: rootModules.has(id) && !depModules.has(id),
-    }))
-
-    const nodeMap = new Map(nodes.map((n) => [n.id, n]))
+    const nodes: GraphNode[] = allNodes.map((n) => ({ ...n }))
+    nodesRef.current = nodes
+    const nodeIds = new Set(nodes.map((n) => n.id))
     const links: GraphLink[] = edges
-      .filter((e) => nodeMap.has(e.from) && nodeMap.has(e.to))
+      .filter((e) => nodeIds.has(e.from) && nodeIds.has(e.to))
       .map((e) => ({ source: e.from, target: e.to }))
 
     if (nodes.length === 0 || links.length === 0) {
@@ -111,27 +125,26 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
     }
 
     try {
-      const container = svg.append('g').attr('class', 'graph-container')
+      const container = svg.append('g')
 
-      // Node radius encodes "how relied-upon" (number of dependents) so the
-      // most depended-on packages stand out at a glance in large graphs.
+      // Node radius encodes how many modules depend on it, so the most
+      // relied-upon modules stand out in large graphs.
       const maxDependents = Math.max(1, ...nodes.map((n) => incoming.get(n.id)?.length ?? 0))
-      const radiusScale = d3.scaleSqrt().domain([0, maxDependents]).range([6, 20])
-      const nodeRadius = (d: GraphNode) => Math.max(d.isRoot ? 9 : 6, radiusScale(incoming.get(d.id)?.length ?? 0))
+      const radiusScale = d3.scaleSqrt().domain([0, maxDependents]).range([5, 18])
+      const nodeRadius = (d: GraphNode) => Math.max(d.isRoot ? 9 : 5, radiusScale(incoming.get(d.id)?.length ?? 0))
 
       const simulation = d3.forceSimulation<GraphNode>(nodes)
-        .force('link', d3.forceLink<GraphNode, GraphLink>(links).id((d) => d.id).distance(130))
-        .force('charge', d3.forceManyBody().strength(-500))
+        .force('link', d3.forceLink<GraphNode, GraphLink>(links).id((d) => d.id).distance(110))
+        .force('charge', d3.forceManyBody().strength(-420))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide<GraphNode>().radius((d) => nodeRadius(d) + 18))
+        .force('collision', d3.forceCollide<GraphNode>().radius((d) => nodeRadius(d) + 16))
 
       simulationRef.current = simulation
 
-      const defs = container.append('defs')
-      defs.append('marker')
+      container.append('defs').append('marker')
         .attr('id', 'arrowhead')
         .attr('viewBox', '0 -5 10 10')
-        .attr('refX', 22)
+        .attr('refX', 20)
         .attr('refY', 0)
         .attr('markerWidth', 6)
         .attr('markerHeight', 6)
@@ -145,8 +158,8 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
         .data(links)
         .join('line')
         .attr('stroke', colors.muted)
-        .attr('stroke-width', 1.5)
-        .attr('stroke-opacity', 0.6)
+        .attr('stroke-width', 1.25)
+        .attr('stroke-opacity', 0.45)
         .attr('marker-end', 'url(#arrowhead)')
 
       linkRef.current = link
@@ -161,44 +174,49 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
 
       group.append('circle')
         .attr('r', nodeRadius)
-        .attr('fill', (d) => d.isRoot ? colors.peach : colors.lavender)
+        .attr('fill', (d) => d.isRoot ? colors.series[1] : colors.series[0])
         .attr('stroke', colors.surface)
-        .attr('stroke-width', 2.5)
+        .attr('stroke-width', 2)
 
+      // Labels get a halo in the surface color so they stay readable over edges.
       group.append('text')
         .text((d) => extractShortName(d.id))
         .attr('text-anchor', 'middle')
         .attr('dy', (d) => -nodeRadius(d) - 6)
-        .attr('font-size', '11px')
-        .attr('fill', colors.muted)
+        .attr('font-size', '12px')
+        .attr('font-family', 'Inter Variable, sans-serif')
+        .attr('fill', colors.text)
+        .attr('stroke', colors.surface)
+        .attr('stroke-width', 3)
+        .attr('paint-order', 'stroke')
         .style('pointer-events', 'none')
 
-      group.on('mouseover', (event: MouseEvent, d) => {
-        const rect = svgRef.current!.getBoundingClientRect()
-        setTooltip({ x: event.clientX - rect.left + 10, y: event.clientY - rect.top - 10, text: d.id })
-      })
+      group
+        .on('mouseover', (event: MouseEvent, d) => {
+          const rect = wrapRef.current!.getBoundingClientRect()
+          setTooltip({ x: event.clientX - rect.left + 12, y: event.clientY - rect.top + 12, text: d.id })
+        })
         .on('mouseout', () => setTooltip(null))
-        .on('click', (_event: MouseEvent, d) => {
+        .on('click', (event: MouseEvent, d) => {
+          event.stopPropagation()
           setSelected(d.id)
-          setShowPanel(true)
         })
 
-      // Reset selection on background click
-      svg.on('click', (event: MouseEvent) => {
-        if ((event.target as Element).tagName === 'svg') {
-          setSelected(null)
-          setShowPanel(false)
-        }
-      })
+      svg.on('click', () => setSelected(null))
 
       const zoom = d3.zoom<SVGSVGElement, unknown>()
         .scaleExtent([0.1, 5])
-        .on('zoom', (event) => {
-          container.attr('transform', event.transform)
+        // A plain mouse wheel scrolls the page; zoom needs ⌘/Ctrl (trackpad
+        // pinch also sends ctrlKey). Without this the graph swallowed every
+        // wheel event and the page couldn't be scrolled.
+        .filter((event: Event) => {
+          if (event.type === 'wheel') return (event as WheelEvent).ctrlKey || (event as WheelEvent).metaKey
+          return !(event as MouseEvent).button
         })
+        .on('zoom', (event) => container.attr('transform', event.transform))
 
       zoomRef.current = zoom
-      svg.call(zoom)
+      svg.call(zoom).on('dblclick.zoom', null)
 
       simulation.on('tick', () => {
         link
@@ -206,9 +224,9 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
           .attr('y1', (d) => (d.source as GraphNode).y!)
           .attr('x2', (d) => (d.target as GraphNode).x!)
           .attr('y2', (d) => (d.target as GraphNode).y!)
-
         group.attr('transform', (d) => `translate(${d.x},${d.y})`)
       })
+      simulation.on('end', () => fitTo(nodes, 600))
     } catch (err) {
       setError('Failed to render graph: ' + (err instanceof Error ? err.message : String(err)))
     }
@@ -221,292 +239,211 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
       linkRef.current = null
       zoomRef.current = null
     }
-  }, [depGraph, colors, incoming])
+  }, [edges, allNodes, colors, incoming, fitTo])
 
+  // Highlight the selected node, its dependencies and its dependents; or, when
+  // nothing is selected, the nodes matching the filter.
   useEffect(() => {
     if (!nodeGroupRef.current || !linkRef.current) return
+    const q = searchQuery.trim().toLowerCase()
+    const matchesQuery = (id: string) => !q || id.toLowerCase().includes(q)
 
     const related = new Set<string>()
     if (selected) {
       related.add(selected)
-      for (const d of (outgoing.get(selected) ?? [])) related.add(d)
-      for (const d of (incoming.get(selected) ?? [])) related.add(d)
+      for (const d of outgoing.get(selected) ?? []) related.add(d)
+      for (const d of incoming.get(selected) ?? []) related.add(d)
     }
 
+    let matches = 0
     nodeGroupRef.current.each(function (d) {
-      const group = d3.select(this)
-      const circle = group.select('circle')
-      const text = group.select('text')
-      const isMatching = !selected || related.has(d.id)
-
-      circle
-        .attr('opacity', isMatching ? 1 : 0.15)
-        .attr('stroke-width', selected === d.id ? 3.5 : 2.5)
-        .attr('stroke', selected === d.id ? colors.peach : colors.surface)
-
-      text.attr('opacity', isMatching ? 1 : 0.15)
+      const visible = selected ? related.has(d.id) : matchesQuery(d.id)
+      if (q && matchesQuery(d.id)) matches++
+      const g = d3.select(this)
+      g.select('circle')
+        .attr('opacity', visible ? 1 : 0.12)
+        .attr('stroke', selected === d.id ? colors.text : colors.surface)
+        .attr('stroke-width', selected === d.id ? 3 : 2)
+      g.select('text').attr('opacity', visible ? 1 : 0.12)
     })
 
-    const selectedOut = new Set(selected ? outgoing.get(selected) ?? [] : [])
-    const selectedIn = new Set(selected ? incoming.get(selected) ?? [] : [])
-
     linkRef.current.each(function (d) {
-      const src = typeof d.source === 'string' ? d.source : (d.source as GraphNode).id
-      const tgt = typeof d.target === 'string' ? d.target : (d.target as GraphNode).id
+      const [src, tgt] = linkEnds(d)
       const line = d3.select(this)
-
-      if (!selected) {
-        line.attr('stroke-opacity', 0.6)
-          .attr('stroke', colors.muted)
-          .attr('stroke-width', 1.5)
-        return
-      }
-
-      const isFromSelected = src === selected && selectedOut.has(tgt)
-      const isToSelected = tgt === selected && selectedIn.has(src)
-
-      if (isFromSelected) {
-        line.attr('stroke', colors.green)
-          .attr('stroke-opacity', 1)
-          .attr('stroke-width', 3)
-      } else if (isToSelected) {
-        line.attr('stroke', colors.blue)
-          .attr('stroke-opacity', 1)
-          .attr('stroke-width', 3)
+      if (selected) {
+        const out = src === selected
+        const inc = tgt === selected
+        line
+          .attr('stroke', out ? colors.series[0] : inc ? colors.series[1] : colors.muted)
+          .attr('stroke-opacity', out || inc ? 0.9 : 0.05)
+          .attr('stroke-width', out || inc ? 2.5 : 1)
       } else {
-        line.attr('stroke-opacity', 0.06)
-          .attr('stroke', colors.muted)
-          .attr('stroke-width', 0.5)
+        const visible = matchesQuery(src) || matchesQuery(tgt)
+        line.attr('stroke', colors.muted).attr('stroke-width', 1.25).attr('stroke-opacity', visible ? 0.45 : 0.04)
       }
     })
-  }, [selected, outgoing, incoming, colors])
 
-  // The info panel shrinks the graph's rendered width — recompute the
-  // viewBox and recenter the simulation so the layout doesn't end up
-  // visually off-center after the panel opens or closes.
+    setMatchCount(q ? matches : null)
+  }, [selected, searchQuery, outgoing, incoming, colors])
+
+  // Bring filter matches into view.
   useEffect(() => {
-    if (!svgRef.current || !simulationRef.current) return
-    const id = requestAnimationFrame(() => {
-      if (!svgRef.current || !simulationRef.current) return
-      const width = svgRef.current.clientWidth
-      const height = dimsRef.current.height
-      dimsRef.current = { width, height }
-      d3.select(svgRef.current).attr('viewBox', `0 0 ${width} ${height}`)
-      simulationRef.current.force('center', d3.forceCenter(width / 2, height / 2))
-      simulationRef.current.alpha(0.3).restart()
-    })
-    return () => cancelAnimationFrame(id)
-  }, [showPanel])
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return
+    const id = setTimeout(() => {
+      const hits = nodesRef.current.filter((n) => n.id.toLowerCase().includes(q))
+      if (hits.length) fitTo(hits)
+    }, 250)
+    return () => clearTimeout(id)
+  }, [searchQuery, fitTo])
 
-  useEffect(() => {
-    if (!nodeGroupRef.current || !linkRef.current) return
-    const q = searchQuery.toLowerCase()
-    const matched: GraphNode[] = []
-
-    nodeGroupRef.current.each(function (d) {
-      const matches = !q || d.id.toLowerCase().includes(q) || extractShortName(d.id).toLowerCase().includes(q)
-      if (q && matches) matched.push(d)
-      d3.select(this).select('circle').attr('opacity', matches ? 1 : 0.08)
-      d3.select(this).select('text').attr('opacity', matches ? 1 : 0.08)
-    })
-
-    linkRef.current.each(function (d) {
-      const src = typeof d.source === 'string' ? d.source : (d.source as GraphNode).id
-      const tgt = typeof d.target === 'string' ? d.target : (d.target as GraphNode).id
-      const matches = !q || src.toLowerCase().includes(q) || tgt.toLowerCase().includes(q) ||
-        extractShortName(src).toLowerCase().includes(q) || extractShortName(tgt).toLowerCase().includes(q)
-      d3.select(this).attr('stroke-opacity', matches ? 0.3 : 0.02)
-    })
-
-    setMatchCount(q ? matched.length : null)
-
-    // Pan/zoom to fit the matching nodes so a match off-screen in a large
-    // graph doesn't go unnoticed.
-    if (q && matched.length > 0 && zoomRef.current && svgRef.current) {
-      const xs = matched.map((d) => d.x ?? 0)
-      const ys = matched.map((d) => d.y ?? 0)
-      const minX = Math.min(...xs), maxX = Math.max(...xs)
-      const minY = Math.min(...ys), maxY = Math.max(...ys)
-      const { width, height } = dimsRef.current
-      const boxW = Math.max(maxX - minX, 1)
-      const boxH = Math.max(maxY - minY, 1)
-      const cx = (minX + maxX) / 2
-      const cy = (minY + maxY) / 2
-      const scale = Math.min(2.5, Math.max(0.4, 0.7 / Math.max(boxW / width, boxH / height)))
-      const transform = d3.zoomIdentity.translate(width / 2, height / 2).scale(scale).translate(-cx, -cy)
-      d3.select(svgRef.current).transition().duration(450).call(zoomRef.current.transform, transform)
-    } else if (!q && zoomRef.current && svgRef.current) {
-      d3.select(svgRef.current).transition().duration(450).call(zoomRef.current.transform, d3.zoomIdentity)
-    }
-  }, [searchQuery])
-
-  const handleClosePanel = () => {
-    setSelected(null)
-    setShowPanel(false)
+  if (!depGraph || !edges.length) {
+    return (
+      <div className="max-w-6xl mx-auto p-8">
+        <EmptyState message="No dependency graph available." onScan={onScan} scanning={scanning} />
+      </div>
+    )
   }
 
+  const rootCount = allNodes.filter((n) => n.isRoot).length
+
   return (
-    <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1600px)' }}>
-      <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text mb-4">Dependency Graph</h2>
-
-      {!depGraph || !depGraph.edges || depGraph.edges.length === 0 ? (
-        <EmptyState message="No dependency graph available." onScan={onScan} scanning={scanning} />
-      ) : (
-        <div className="flex gap-4">
-          {/* Graph area */}
-          <div className={`flex-1 min-w-0 ${showPanel ? 'w-3/5' : 'w-full'}`}>
-            {error && (
-              <div className="mb-3 p-3 bg-red-50 dark:bg-ctp-surface0 border border-red-200 dark:border-ctp-surface1 rounded text-sm text-red-700 dark:text-ctp-red">
-                {error}
-              </div>
-            )}
-
-            {/* Search + legend bar */}
-            <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-t">
-              <div className="px-4 py-2.5 border-b border-gray-200 dark:border-ctp-surface1 flex items-center gap-3 flex-wrap">
-                <div className="relative flex-1 min-w-[180px] max-w-sm">
-                  <svg
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 dark:text-ctp-subtext1 pointer-events-none"
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
-                  </svg>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Filter dependencies..."
-                    className="w-full pl-8 pr-7 py-1.5 text-xs rounded border border-gray-300 dark:border-ctp-surface1 bg-gray-50 dark:bg-ctp-base text-gray-700 dark:text-ctp-text focus:outline-none focus:ring-1 focus:ring-blue-400 dark:focus:ring-ctp-sky"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      aria-label="Clear search"
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-ctp-subtext0"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-ctp-subtext0 shrink-0">
-                  <span className="flex items-center gap-1">
-                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.peach }} /> Root
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.lavender }} /> Dep
-                  </span>
-                  <span className="text-gray-400 dark:text-ctp-subtext1">&middot; size = dependents</span>
-                  {!searchQuery && (
-                    <span className="text-gray-400 dark:text-ctp-subtext1 ml-1">
-                      {edges.length} edges &middot; {allNodes.length} nodes
-                    </span>
-                  )}
-                  {searchQuery && (
-                    <span className="text-gray-400 dark:text-ctp-subtext1 ml-1" aria-live="polite">
-                      {matchCount === 0
-                        ? 'No matches'
-                        : `${matchCount} of ${allNodes.length} match${matchCount === 1 ? '' : 'es'}`}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <svg ref={svgRef} className="w-full" style={{ height: '78vh', minHeight: 500 }} />
-            </div>
-
-            {tooltip && (
-              <div
-                role="tooltip"
-                className="absolute z-10 px-3 py-1.5 text-xs bg-gray-900 text-white rounded shadow-lg pointer-events-none max-w-sm break-all"
-                style={{ left: tooltip.x, top: tooltip.y }}
-              >
-                {tooltip.text}
-              </div>
-            )}
-          </div>
-
-          {/* Info panel */}
-          {showPanel && selectedInfo && (
-            <div className="w-96 shrink-0 bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg shadow-lg self-start sticky top-20 max-h-[80vh] overflow-y-auto">
-              <div className="px-4 py-3 border-b border-gray-200 dark:border-ctp-surface1 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-ctp-text truncate">
-                  {selectedInfo.shortName}
-                </h3>
-                <button
-                  onClick={handleClosePanel}
-                  aria-label="Close panel"
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-ctp-subtext0 shrink-0 ml-2"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-ctp-surface1">
-                <p className="text-xs font-mono text-gray-500 dark:text-ctp-subtext1 break-all leading-relaxed">{selectedInfo.id}</p>
-              </div>
-
-              {/* Dependencies (outgoing) */}
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-ctp-surface1">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-ctp-subtext1 mb-2 flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                  Dependencies ({selectedInfo.deps.length})
-                </h4>
-                {selectedInfo.deps.length === 0 ? (
-                  <p className="text-xs text-gray-400 dark:text-ctp-subtext0 italic">None</p>
-                ) : (
-                  <ul className="space-y-0.5 max-h-40 overflow-y-auto">
-                    {selectedInfo.deps.map((dep) => (
-                      <li key={dep}>
-                        <button
-                          onClick={() => setSelected(dep)}
-                          className="text-xs text-left w-full px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-ctp-surface1 text-gray-700 dark:text-ctp-subtext0 font-mono truncate"
-                        >
-                          <span className="text-green-500 mr-1.5">→</span>
-                          {extractShortName(dep)}
-                          <span className="text-gray-400 dark:text-ctp-subtext1 ml-1.5 text-[10px]">{dep}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {/* Dependents (incoming) */}
-              <div className="px-4 py-3">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-ctp-subtext1 mb-2 flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-                  </svg>
-                  Used by ({selectedInfo.dependents.length})
-                </h4>
-                {selectedInfo.dependents.length === 0 ? (
-                  <p className="text-xs text-gray-400 dark:text-ctp-subtext0 italic">None (root module)</p>
-                ) : (
-                  <ul className="space-y-0.5 max-h-40 overflow-y-auto">
-                    {selectedInfo.dependents.map((dep) => (
-                      <li key={dep}>
-                        <button
-                          onClick={() => setSelected(dep)}
-                          className="text-xs text-left w-full px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-ctp-surface1 text-gray-700 dark:text-ctp-subtext0 font-mono truncate"
-                        >
-                          <span className="text-blue-500 mr-1.5">←</span>
-                          {extractShortName(dep)}
-                          <span className="text-gray-400 dark:text-ctp-subtext1 ml-1.5 text-[10px]">{dep}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+    <div className="h-full min-h-[560px] flex flex-col p-6 gap-3">
+      {error && (
+        <div className="p-3 bg-danger-soft border border-danger/30 rounded-md text-sm text-danger">{error}</div>
       )}
+
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative w-72">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle pointer-events-none" aria-hidden="true" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setSelected(null) }}
+            placeholder="Filter modules…"
+            aria-label="Filter modules"
+            className="input w-full pl-8"
+          />
+        </div>
+        <span className="text-sm text-fg-muted tabular-nums" aria-live="polite">
+          {matchCount === null
+            ? `${allNodes.length} modules · ${edges.length} edges`
+            : matchCount === 0 ? 'No matches' : `${matchCount} of ${allNodes.length} match`}
+        </span>
+        <div className="flex-1" />
+        <div className="flex items-center gap-4 text-sm text-fg-muted">
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: colors.series[1] }} /> Your module{rootCount === 1 ? '' : 's'}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: colors.series[0] }} /> Dependency
+          </span>
+          <span>Size = number of dependents</span>
+        </div>
+      </div>
+
+      {/* Graph */}
+      <div ref={wrapRef} className="relative flex-1 min-h-0 card overflow-hidden">
+        <svg ref={svgRef} className="w-full h-full block" role="img" aria-label="Module dependency graph" />
+
+        <div className="absolute left-3 bottom-3 flex items-center gap-2">
+          <div className="flex rounded-md border border-line bg-surface shadow-sm">
+            <IconButton label="Zoom in" onClick={() => zoomBy(1.4)}><ZoomIn className="w-4 h-4" /></IconButton>
+            <IconButton label="Zoom out" onClick={() => zoomBy(1 / 1.4)}><ZoomOut className="w-4 h-4" /></IconButton>
+            <IconButton label="Fit to view" onClick={() => fitTo(nodesRef.current)}><Maximize className="w-4 h-4" /></IconButton>
+          </div>
+          <span className="text-xs text-fg-muted bg-surface/90 px-2 py-1 rounded border border-line">
+            Drag to pan · <kbd className="kbd">{isMac ? '⌘' : 'Ctrl'}</kbd> + scroll to zoom · click a module for details
+          </span>
+        </div>
+
+        {tooltip && (
+          <div
+            role="tooltip"
+            className="absolute z-10 px-2.5 py-1.5 text-xs font-mono bg-inverse text-white rounded-md shadow-lg pointer-events-none max-w-sm break-all"
+            style={{ left: tooltip.x, top: tooltip.y }}
+          >
+            {tooltip.text}
+          </div>
+        )}
+
+        {selectedInfo && (
+          <aside className="absolute top-3 right-3 bottom-3 w-96 max-w-[calc(100%-1.5rem)] flex flex-col card shadow-lg">
+            <header className="px-4 py-3 border-b border-line flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-semibold truncate">{selectedInfo.shortName}</h3>
+                <p className="mt-0.5 text-xs font-mono text-fg-muted break-all">{selectedInfo.id}</p>
+              </div>
+              <button onClick={() => setSelected(null)} aria-label="Close details" className="btn-ghost p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </header>
+            <div className="flex-1 overflow-y-auto">
+              <ModuleList
+                title="Depends on"
+                Icon={ArrowRight}
+                tone={colors.series[0]}
+                items={selectedInfo.deps}
+                empty="No dependencies"
+                onSelect={setSelected}
+              />
+              <ModuleList
+                title="Used by"
+                Icon={ArrowLeft}
+                tone={colors.series[1]}
+                items={selectedInfo.dependents}
+                empty="Nothing depends on this (root module)"
+                onSelect={setSelected}
+              />
+            </div>
+          </aside>
+        )}
+      </div>
     </div>
+  )
+}
+
+function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} title={label} aria-label={label} className="p-1.5 text-fg-muted hover:text-fg hover:bg-subtle first:rounded-l-md last:rounded-r-md">
+      {children}
+    </button>
+  )
+}
+
+function ModuleList({ title, Icon, tone, items, empty, onSelect }: {
+  title: string
+  Icon: typeof ArrowRight
+  tone: string
+  items: string[]
+  empty: string
+  onSelect: (id: string) => void
+}) {
+  return (
+    <section className="px-4 py-3 border-b border-line last:border-b-0">
+      <h4 className="label mb-2 flex items-center gap-1.5">
+        <Icon className="w-3.5 h-3.5" style={{ color: tone }} aria-hidden="true" />
+        {title} <span className="font-normal normal-case tracking-normal">({items.length})</span>
+      </h4>
+      {items.length === 0 ? (
+        <p className="text-sm text-fg-muted">{empty}</p>
+      ) : (
+        <ul className="space-y-0.5">
+          {items.map((dep) => (
+            <li key={dep}>
+              <button
+                onClick={() => onSelect(dep)}
+                className="w-full text-left px-2 py-1 rounded hover:bg-subtle"
+                title={dep}
+              >
+                <span className="block text-sm text-fg truncate">{extractShortName(dep)}</span>
+                <span className="block text-xs font-mono text-fg-muted truncate">{dep}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }

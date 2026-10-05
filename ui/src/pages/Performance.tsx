@@ -1,27 +1,19 @@
 import { useMemo, useRef, useEffect, useState } from 'react'
 import * as d3 from 'd3'
+import { Download } from 'lucide-react'
 import { BenchmarkResult, ProfileData, ProfileEntry } from '../api/client'
 import PerformancePlan from '../components/PerformancePlan'
-import { useThemeColors, ThemeColors } from '../hooks/useThemeColors'
+import { useThemeColors, seriesColorMap } from '../hooks/useThemeColors'
 import EmptyState from '../components/EmptyState'
 
-// A categorical palette drawn from the active theme's accent colors, so
-// per-series/per-category chart colors stay coordinated across schemes.
-function categoricalPalette(c: ThemeColors): string[] {
-  return [c.blue, c.mauve, c.teal, c.peach, c.green, c.sapphire, c.yellow, c.lavender, c.pink, c.red]
-}
-
-// Theme accents range from dark-saturated (Dracula red) to pale pastel
-// (Catppuccin Latte yellow), so a fixed white/black label color reads poorly
-// on roughly half the palette in any given scheme. Pick whichever of
-// near-black/near-white yields better contrast against the *actual* resolved
-// fill, using the standard YIQ perceived-brightness formula.
+// Chart fills come from the fixed categorical series order; label text on a
+// fill picks near-black or white, whichever contrasts more with that fill.
 function contrastOn(hex: string): string {
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex.trim())
   if (!m) return '#fff'
   const [r, g, b] = [m[1], m[2], m[3]].map((h) => parseInt(h, 16))
   const yiq = (r * 299 + g * 587 + b * 114) / 1000
-  return yiq >= 150 ? '#1e1e2e' : '#fff'
+  return yiq >= 150 ? '#1f2328' : '#fff'
 }
 
 interface Props {
@@ -54,13 +46,13 @@ function fmtShortNS(ns: number): string {
 }
 
 function allocEfficiency(allocs: number, bytes: number): { score: number; label: string; color: string } {
-  if (allocs === 0) return { score: 100, label: 'Perfect', color: 'text-green-600 dark:text-ctp-green' }
+  if (allocs === 0) return { score: 100, label: 'Perfect', color: 'text-success' }
   const ratio = bytes / allocs
-  if (ratio >= 64) return { score: 95, label: 'Excellent', color: 'text-green-600 dark:text-ctp-green' }
-  if (ratio >= 32) return { score: 80, label: 'Good', color: 'text-emerald-600 dark:text-ctp-teal' }
-  if (ratio >= 16) return { score: 60, label: 'Fair', color: 'text-yellow-600 dark:text-ctp-yellow' }
-  if (ratio >= 8) return { score: 40, label: 'Poor', color: 'text-orange-600 dark:text-ctp-peach' }
-  return { score: 20, label: 'Bad', color: 'text-red-600 dark:text-ctp-red' }
+  if (ratio >= 64) return { score: 95, label: 'Excellent', color: 'text-success' }
+  if (ratio >= 32) return { score: 80, label: 'Good', color: 'text-success' }
+  if (ratio >= 16) return { score: 60, label: 'Fair', color: 'text-warning' }
+  if (ratio >= 8) return { score: 40, label: 'Poor', color: 'text-orange' }
+  return { score: 20, label: 'Bad', color: 'text-danger' }
 }
 
 interface Suggestion {
@@ -160,20 +152,20 @@ function inferCategory(name: string): string {
 
 function SectionHeader({ icon, iconClass, title, hint }: { icon: React.ReactNode; iconClass: string; title: string; hint?: string }) {
   return (
-    <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-200 dark:border-ctp-surface1">
+    <div className="flex items-center gap-2 mb-4 pb-2 border-b border-line">
       <span className={iconClass}>{icon}</span>
-      <h3 className="text-base font-bold text-gray-800 dark:text-ctp-text">{title}</h3>
-      {hint && <span className="text-xs text-gray-400 dark:text-ctp-subtext1">{hint}</span>}
+      <h3 className="text-base font-bold text-fg">{title}</h3>
+      {hint && <span className="text-xs text-fg-subtle">{hint}</span>}
     </div>
   )
 }
 
 function ChartCard({ title, caption, children }: { title: string; caption?: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg overflow-hidden">
-      <div className="px-4 pt-3 pb-2 border-b border-gray-100 dark:border-ctp-surface1">
-        <h4 className="text-xs font-semibold text-gray-600 dark:text-ctp-subtext1 uppercase tracking-wide">{title}</h4>
-        {caption && <p className="text-[11px] text-gray-400 dark:text-ctp-subtext0 mt-0.5">{caption}</p>}
+    <div className="bg-surface border border-line rounded-lg overflow-hidden">
+      <div className="px-4 pt-3 pb-2 border-b border-line">
+        <h4 className="text-xs font-semibold text-fg-muted uppercase tracking-wide">{title}</h4>
+        {caption && <p className="text-xs text-fg-subtle mt-0.5">{caption}</p>}
       </div>
       <div className="relative p-3">{children}</div>
     </div>
@@ -182,10 +174,10 @@ function ChartCard({ title, caption, children }: { title: string; caption?: stri
 
 function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
   return (
-    <div className="bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg px-4 py-3">
-      <div className="text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide mb-0.5">{label}</div>
-      <div className={`text-xl font-bold tabular-nums ${accent || 'text-gray-800 dark:text-ctp-text'}`}>{value}</div>
-      {sub && <div className="text-[11px] text-gray-400 dark:text-ctp-subtext0 mt-0.5 truncate">{sub}</div>}
+    <div className="bg-surface border border-line rounded-lg px-4 py-3">
+      <div className="text-xs text-fg-muted uppercase tracking-wide mb-0.5">{label}</div>
+      <div className={`text-xl font-bold tabular-nums ${accent || 'text-fg'}`}>{value}</div>
+      {sub && <div className="text-xs text-fg-subtle mt-0.5 truncate">{sub}</div>}
     </div>
   )
 }
@@ -224,7 +216,7 @@ function BenchmarkBars({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
     // Color encodes allocations: green (none) -> yellow -> red (many).
     const colorScale = d3.scaleSequentialSqrt()
       .domain([0, Math.max(maxAllocs, 1)])
-      .interpolator(d3.interpolateRgbBasis([colors.green, colors.yellow, colors.red]))
+      .interpolator(d3.interpolateRgbBasis([colors.good, colors.warn, colors.bad]))
 
     const g = svg.append('g').attr('transform', `translate(${pad.left},${pad.top})`)
 
@@ -236,13 +228,13 @@ function BenchmarkBars({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
       .attr('stroke', colors.border).attr('stroke-opacity', 0.5)
     g.append('g').selectAll('text').data(ticks).join('text')
       .attr('x', (d) => xScale(d)).attr('y', sorted.length * rowH + 14)
-      .attr('text-anchor', 'middle').attr('font-size', '9px').attr('fill', colors.overlay1)
+      .attr('text-anchor', 'middle').attr('font-size', '9px').attr('fill', colors.axis)
       .text((d) => fmtShortNS(d as number))
 
     sorted.forEach((b, i) => {
       const y = i * rowH
       const w = Math.max(xScale(b.time_per_op), 2)
-      const color = b.allocs_per_op > 0 ? colorScale(b.allocs_per_op) : colors.green
+      const color = b.allocs_per_op > 0 ? colorScale(b.allocs_per_op) : colors.good
 
       // row label (benchmark name)
       g.append('text').attr('x', -10).attr('y', y + rowH / 2)
@@ -288,12 +280,12 @@ function BenchTooltip({ tooltip }: { tooltip: { x: number; y: number; data: Benc
   if (!tooltip.data) return null
   const eff = allocEfficiency(tooltip.data.allocs_per_op, tooltip.data.bytes_per_op)
   return (
-    <div role="tooltip" className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-relaxed max-w-xs"
+    <div role="tooltip" className="absolute z-20 pointer-events-none bg-inverse text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-relaxed max-w-xs"
       style={{ left: Math.min(tooltip.x, window.innerWidth - 280), top: Math.max(tooltip.y, 10) }}
     >
       <div className="font-semibold text-sm mb-1 break-all">{tooltip.data.name}</div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-gray-300">
-        <span>Time/Op</span><span className="text-right font-mono text-green-400">{fmtDuration(tooltip.data.time_per_op)}</span>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-line-strong">
+        <span>Time/Op</span><span className="text-right font-mono text-success">{fmtDuration(tooltip.data.time_per_op)}</span>
         <span>Iterations</span><span className="text-right font-mono">{tooltip.data.iterations.toLocaleString()}</span>
         <span>Allocs/Op</span><span className="text-right font-mono">{tooltip.data.allocs_per_op}</span>
         <span>Bytes/Op</span><span className="text-right font-mono">{fmtBytes(tooltip.data.bytes_per_op)}</span>
@@ -309,7 +301,6 @@ function BenchTooltip({ tooltip }: { tooltip: { x: number; y: number; data: Benc
 
 function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
   const colors = useThemeColors()
-  const catPalette = useMemo(() => categoricalPalette(colors), [colors])
   const svgRef = useRef<SVGSVGElement>(null)
   const [tooltip, setTooltip] = useTooltip<BenchmarkResult>()
 
@@ -319,11 +310,7 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
     return Array.from(seen).sort()
   }, [benchmarks])
 
-  const catColor = useMemo(() => {
-    const m = new Map<string, string>()
-    categories.forEach((c, i) => m.set(c, catPalette[i % catPalette.length]))
-    return m
-  }, [categories, catPalette])
+  const catColor = useMemo(() => seriesColorMap(categories, colors), [categories, colors])
 
   useEffect(() => {
     if (!benchmarks.length || !svgRef.current) return
@@ -353,11 +340,11 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
 
     const xAxis = g.append('g').attr('transform', `translate(0,${innerH})`)
       .call(d3.axisBottom(xScale).ticks(6).tickFormat((d) => fmtShortNS(d as number)))
-      .attr('color', colors.overlay1).attr('font-size', '11px')
+      .attr('color', colors.axis).attr('font-size', '11px')
     xAxis.selectAll('.domain').attr('stroke', colors.border)
     xAxis.selectAll('.tick line').attr('stroke', colors.border)
 
-    const yAxis = g.append('g').call(d3.axisLeft(yScale).ticks(6)).attr('color', colors.overlay1).attr('font-size', '11px')
+    const yAxis = g.append('g').call(d3.axisLeft(yScale).ticks(6)).attr('color', colors.axis).attr('font-size', '11px')
     yAxis.selectAll('.domain').attr('stroke', colors.border)
     yAxis.selectAll('.tick line').attr('stroke', colors.border)
 
@@ -376,14 +363,14 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
       .attr('stroke', colors.border).attr('stroke-dasharray', '4,4')
 
     const qBadges = [
-      { x: innerW - 6, y: 4, anchor: 'end', label: '✦ Best', color: colors.green, desc: 'fast · low allocs' },
-      { x: 6, y: 4, anchor: 'start', label: '✘ Worst', color: colors.red, desc: 'slow · alloc-heavy' },
+      { x: innerW - 6, y: 4, anchor: 'end', label: '✦ Best', color: colors.good, desc: 'fast · low allocs' },
+      { x: 6, y: 4, anchor: 'start', label: '✘ Worst', color: colors.bad, desc: 'slow · alloc-heavy' },
     ]
     qBadges.forEach((qb) => {
       g.append('text').attr('x', qb.x).attr('y', qb.y).attr('text-anchor', qb.anchor)
         .attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', qb.color).text(qb.label)
       g.append('text').attr('x', qb.x).attr('y', qb.y + 13).attr('text-anchor', qb.anchor)
-        .attr('font-size', '9px').attr('fill', colors.overlay1).text(qb.desc)
+        .attr('font-size', '9px').attr('fill', colors.axis).text(qb.desc)
     })
 
     const rScale = d3.scaleSqrt().domain([0, d3.max(benchmarks, (d) => d.bytes_per_op) || 1]).range([4, 18])
@@ -396,7 +383,7 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
       const cat = inferCategory(d.name)
 
       dotGroup.append('circle').attr('cx', cx).attr('cy', cy).attr('r', r)
-        .attr('fill', catColor.get(cat) || colors.lavender)
+        .attr('fill', catColor.get(cat) || colors.series[0])
         .attr('opacity', 0.75).attr('stroke', colors.surface).attr('stroke-width', 1.5)
         .style('cursor', 'pointer')
         .on('mouseover', function (event: MouseEvent) {
@@ -435,20 +422,20 @@ function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
     }
 
     const legG = svg.append('g').attr('transform', `translate(${width - pad.right + 12}, ${pad.top + 16})`)
-    legG.append('text').text('Category').attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', colors.overlay1)
+    legG.append('text').text('Category').attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', colors.axis)
     categories.forEach((c, i) => {
       const ly = (i + 1) * 20
-      legG.append('circle').attr('cx', 0).attr('cy', ly).attr('r', 5).attr('fill', catPalette[i % catPalette.length]).attr('opacity', 0.8)
+      legG.append('circle').attr('cx', 0).attr('cy', ly).attr('r', 5).attr('fill', catColor.get(categories[i]) ?? colors.other).attr('opacity', 0.8)
       legG.append('text').attr('x', 12).attr('y', ly + 4).attr('font-size', '10px').attr('fill', colors.muted).text(c)
     })
     const sizeLegY = (categories.length + 2) * 20
-    legG.append('text').text('Bytes/Op').attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', colors.overlay1).attr('y', sizeLegY)
+    legG.append('text').text('Bytes/Op').attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', colors.axis).attr('y', sizeLegY)
     ;[{ r: 5, label: '0 B' }, { r: 10, label: '~100 B' }, { r: 16, label: '~1 KB+' }].forEach((s, i) => {
       const sy = sizeLegY + (i + 1) * 22
-      legG.append('circle').attr('cx', 0).attr('cy', sy).attr('r', s.r).attr('fill', colors.overlay0).attr('opacity', 0.5)
-      legG.append('text').attr('x', s.r + 8).attr('y', sy + 4).attr('font-size', '10px').attr('fill', colors.overlay1).text(s.label)
+      legG.append('circle').attr('cx', 0).attr('cy', sy).attr('r', s.r).attr('fill', colors.muted).attr('opacity', 0.5)
+      legG.append('text').attr('x', s.r + 8).attr('y', sy + 4).attr('font-size', '10px').attr('fill', colors.axis).text(s.label)
     })
-  }, [benchmarks, categories, catColor, colors, catPalette, setTooltip])
+  }, [benchmarks, categories, catColor, colors, setTooltip])
 
   return (
     <div className="relative">
@@ -466,7 +453,6 @@ interface TreeLeaf { name: string; pkg: string; fn: string; value: number; flat:
 
 function ProfileTreemap({ entries }: { entries: ProfileEntry[] }) {
   const colors = useThemeColors()
-  const palette = useMemo(() => categoricalPalette(colors), [colors])
   const svgRef = useRef<SVGSVGElement>(null)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string }>({ x: 0, y: 0, text: '' })
 
@@ -479,8 +465,7 @@ function ProfileTreemap({ entries }: { entries: ProfileEntry[] }) {
     if (!sorted.length) return
 
     const pkgs = Array.from(new Set(sorted.map((e) => extractPkg(e.function))))
-    const pkgColor = new Map<string, string>()
-    pkgs.forEach((p, i) => pkgColor.set(p, palette[i % palette.length]))
+    const pkgColor = seriesColorMap(pkgs, colors)
 
     const leaves: TreeLeaf[] = sorted.map((e) => ({
       name: extractFnShort(e.function), pkg: extractPkg(e.function), fn: e.function, value: e.flat_pct, flat: e.flat,
@@ -503,7 +488,7 @@ function ProfileTreemap({ entries }: { entries: ProfileEntry[] }) {
       .attr('width', (d) => { const n = d as d3.HierarchyRectangularNode<unknown>; return n.x1 - n.x0 })
       .attr('height', (d) => { const n = d as d3.HierarchyRectangularNode<unknown>; return n.y1 - n.y0 })
       .attr('rx', 3)
-      .attr('fill', (d) => pkgColor.get((d.data as TreeLeaf).pkg) || colors.lavender)
+      .attr('fill', (d) => pkgColor.get((d.data as TreeLeaf).pkg) || colors.series[0])
       .attr('opacity', 0.85)
       .attr('stroke', colors.surface).attr('stroke-width', 1)
       .style('cursor', 'pointer')
@@ -528,7 +513,7 @@ function ProfileTreemap({ entries }: { entries: ProfileEntry[] }) {
       const h = n.y1 - n.y0
       const leaf = d.data as TreeLeaf
       if (w < 46 || h < 26) return
-      const labelColor = contrastOn(pkgColor.get(leaf.pkg) || colors.lavender)
+      const labelColor = contrastOn(pkgColor.get(leaf.pkg) || colors.series[0])
       const t = d3.select(this).append('text')
         .attr('x', 5).attr('y', 14).attr('font-size', '10px').attr('font-weight', 'bold')
         .attr('fill', labelColor).style('pointer-events', 'none')
@@ -538,13 +523,13 @@ function ProfileTreemap({ entries }: { entries: ProfileEntry[] }) {
           .attr('fill', labelColor).attr('opacity', 0.85).text(`${leaf.value.toFixed(1)}%`)
       }
     })
-  }, [entries, colors, palette])
+  }, [entries, colors])
 
   return (
     <div className="relative">
       <svg ref={svgRef} className="w-full" style={{ height: 360 }} />
       {tooltip.text && (
-        <div role="tooltip" className="absolute z-20 pointer-events-none bg-gray-900 dark:bg-black text-white text-xs rounded-lg shadow-xl px-2 py-1 max-w-xs break-all"
+        <div role="tooltip" className="absolute z-20 pointer-events-none bg-inverse text-white text-xs rounded-lg shadow-xl px-2 py-1 max-w-xs break-all"
           style={{ left: Math.min(tooltip.x + 10, window.innerWidth - 280), top: tooltip.y - 10 }}
         >{tooltip.text}</div>
       )}
@@ -559,10 +544,10 @@ function ProfileTreemap({ entries }: { entries: ProfileEntry[] }) {
 function ProfileTable({ entries, maxFlat, unit }: { entries: ProfileEntry[] | null; maxFlat: number; unit: string }) {
   if (!entries || entries.length === 0) return null
   return (
-    <div className="overflow-x-auto bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg">
+    <div className="overflow-x-auto bg-surface border border-line rounded-lg">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-200 dark:border-ctp-surface1 text-left text-xs text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide">
+          <tr className="border-b border-line text-left text-xs text-fg-muted uppercase tracking-wide">
             <th className="py-3 px-4 font-medium">Function</th>
             <th className="py-3 px-4 font-medium text-right">Self ({unit})</th>
             <th className="py-3 px-4 font-medium text-right">Self %</th>
@@ -574,21 +559,21 @@ function ProfileTable({ entries, maxFlat, unit }: { entries: ProfileEntry[] | nu
             const barW = maxFlat > 0 ? (e.flat / maxFlat) * 100 : 0
             const isHot = e.flat_pct > 15
             return (
-              <tr key={i} className="border-b border-gray-100 dark:border-ctp-surface1 hover:bg-gray-50 dark:hover:bg-ctp-surface0 transition-colors">
-                <td className="py-2.5 px-4 font-mono text-xs text-gray-800 dark:text-ctp-text max-w-md truncate" title={e.function}>
-                  {isHot && <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 dark:bg-ctp-red mr-1.5 align-middle" />}
+              <tr key={i} className="border-b border-line hover:bg-subtle transition-colors">
+                <td className="py-2.5 px-4 font-mono text-xs text-fg max-w-md truncate" title={e.function}>
+                  {isHot && <span className="inline-block w-1.5 h-1.5 rounded-full bg-danger-solid mr-1.5 align-middle" />}
                   {e.function}
                 </td>
                 <td className="py-2.5 px-4 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <span className={`font-mono text-xs tabular-nums ${isHot ? 'text-red-600 dark:text-ctp-red font-semibold' : 'text-gray-700 dark:text-ctp-subtext1'}`}>{e.flat.toFixed(2)}</span>
-                    <div className="w-20 h-2 bg-gray-200 dark:bg-ctp-surface1 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${isHot ? 'bg-red-500 dark:bg-ctp-red' : 'bg-blue-500 dark:bg-ctp-blue'}`} style={{ width: `${barW}%` }} />
+                    <span className={`font-mono text-xs tabular-nums ${isHot ? 'text-danger font-semibold' : 'text-fg'}`}>{e.flat.toFixed(2)}</span>
+                    <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${isHot ? 'bg-danger-solid' : 'bg-accent-solid'}`} style={{ width: `${barW}%` }} />
                     </div>
                   </div>
                 </td>
-                <td className={`py-2.5 px-4 text-right font-mono text-xs tabular-nums ${isHot ? 'text-red-600 dark:text-ctp-red font-semibold' : 'text-gray-700 dark:text-ctp-subtext1'}`}>{e.flat_pct.toFixed(1)}%</td>
-                <td className="py-2.5 px-4 text-right font-mono text-xs tabular-nums text-gray-700 dark:text-ctp-subtext1">{e.cum_pct.toFixed(1)}%</td>
+                <td className={`py-2.5 px-4 text-right font-mono text-xs tabular-nums ${isHot ? 'text-danger font-semibold' : 'text-fg'}`}>{e.flat_pct.toFixed(1)}%</td>
+                <td className="py-2.5 px-4 text-right font-mono text-xs tabular-nums text-fg">{e.cum_pct.toFixed(1)}%</td>
               </tr>
             )
           })}
@@ -604,20 +589,15 @@ function ProfileTable({ entries, maxFlat, unit }: { entries: ProfileEntry[] | nu
 
 function BenchmarkTable({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
   const colors = useThemeColors()
-  const catPalette = useMemo(() => categoricalPalette(colors), [colors])
   const sorted = useMemo(() => [...benchmarks].sort((a, b) => b.time_per_op - a.time_per_op), [benchmarks])
   const categories = useMemo(() => Array.from(new Set(benchmarks.map((b) => inferCategory(b.name)))).sort(), [benchmarks])
-  const catColor = useMemo(() => {
-    const m = new Map<string, string>()
-    categories.forEach((c, i) => m.set(c, catPalette[i % catPalette.length]))
-    return m
-  }, [categories, catPalette])
+  const catColor = useMemo(() => seriesColorMap(categories, colors), [categories, colors])
 
   return (
-    <div className="overflow-x-auto bg-white dark:bg-ctp-surface0 border border-gray-200 dark:border-ctp-surface1 rounded-lg">
+    <div className="overflow-x-auto bg-surface border border-line rounded-lg">
       <table className="w-full text-xs">
         <thead>
-          <tr className="border-b border-gray-100 dark:border-ctp-surface1 text-left text-gray-500 dark:text-ctp-subtext0 uppercase tracking-wide">
+          <tr className="border-b border-line text-left text-fg-muted uppercase tracking-wide">
             <th className="py-2 px-3 font-medium">Benchmark</th>
             <th className="py-2 px-3 font-medium text-right">Time/Op</th>
             <th className="py-2 px-3 font-medium text-right">Allocs</th>
@@ -631,18 +611,18 @@ function BenchmarkTable({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
             const cat = inferCategory(b.name)
             const eff = allocEfficiency(b.allocs_per_op, b.bytes_per_op)
             return (
-              <tr key={i} className="border-b border-gray-100 dark:border-ctp-surface1 hover:bg-gray-50 dark:hover:bg-ctp-surface0 transition-colors">
+              <tr key={i} className="border-b border-line hover:bg-subtle transition-colors">
                 <td className="py-1.5 px-3">
-                  <div className="flex items-center gap-1.5 font-mono text-gray-800 dark:text-ctp-text">
+                  <div className="flex items-center gap-1.5 font-mono text-fg">
                     <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor.get(cat) }} />
                     <span className="truncate" title={b.name}>{b.name}</span>
                   </div>
                 </td>
-                <td className="py-1.5 px-3 text-right font-mono tabular-nums text-gray-700 dark:text-ctp-subtext1">{fmtDuration(b.time_per_op)}</td>
-                <td className="py-1.5 px-3 text-right font-mono tabular-nums text-gray-700 dark:text-ctp-subtext1">{b.allocs_per_op}</td>
-                <td className="py-1.5 px-3 text-right font-mono tabular-nums text-gray-700 dark:text-ctp-subtext1">{fmtBytes(b.bytes_per_op)}</td>
+                <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg">{fmtDuration(b.time_per_op)}</td>
+                <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg">{b.allocs_per_op}</td>
+                <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg">{fmtBytes(b.bytes_per_op)}</td>
                 <td className={`py-1.5 px-3 text-right font-medium ${eff.color}`}>{eff.label}</td>
-                <td className="py-1.5 px-3 text-right tabular-nums text-gray-500 dark:text-ctp-subtext0">{b.iterations.toLocaleString()}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums text-fg-muted">{b.iterations.toLocaleString()}</td>
               </tr>
             )
           })}
@@ -698,7 +678,6 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
   if (!hasBenchmarks && !hasProfile) {
     return (
       <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1600px)' }}>
-        <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text mb-5">Performance</h2>
         <EmptyState message="No performance data available. Run a scan with benchmarks and profiling enabled." onScan={onScan} scanning={scanning} />
       </div>
     )
@@ -706,19 +685,12 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
 
   return (
     <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1600px)' }}>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text">Performance</h2>
-        {(hasBenchmarks || hasProfile) && (
-          <button
-            onClick={() => setShowPlan(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-ctp-lavender dark:text-ctp-base dark:hover:bg-ctp-mauve transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-            Generate Plan
-          </button>
-        )}
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <p className="text-sm text-fg-muted">Benchmarks from <code className="font-mono">go test -bench</code> and CPU/memory profiles of those benchmarks.</p>
+        <button onClick={() => setShowPlan(true)} className="btn-secondary shrink-0">
+          <Download className="w-4 h-4" aria-hidden="true" />
+          Export plan
+        </button>
       </div>
 
       {/* At-a-glance summary cards */}
@@ -732,13 +704,13 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
                 label="Slowest"
                 value={fmtShortNS(stats.slowest.time_per_op)}
                 sub={extractShortName(stats.slowest.name)}
-                accent="text-red-600 dark:text-ctp-red"
+                accent="text-danger "
               />
               <StatCard
                 label="Most Allocations"
                 value={`${stats.heaviest.allocs_per_op}/op`}
                 sub={extractShortName(stats.heaviest.name)}
-                accent={stats.heaviest.allocs_per_op > 0 ? 'text-orange-600 dark:text-ctp-peach' : undefined}
+                accent={stats.heaviest.allocs_per_op > 0 ? 'text-orange' : undefined}
               />
             </>
           )}
@@ -747,7 +719,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
               label={`Hottest (${profileTab.toUpperCase()})`}
               value={`${hottest.flat_pct.toFixed(1)}%`}
               sub={extractFnShort(hottest.function)}
-              accent="text-red-600 dark:text-ctp-red"
+              accent="text-danger "
             />
           )}
         </div>
@@ -757,7 +729,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
       {hasBenchmarks && (
         <section className="mb-10">
           <SectionHeader
-            iconClass="w-5 h-5 text-indigo-500 dark:text-ctp-lavender"
+            iconClass="w-5 h-5 text-accent "
             title="Benchmarking"
             hint={`${benchmarks!.length} benchmarks`}
             icon={
@@ -784,7 +756,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
       {hasProfile && (
         <section className="mb-10">
           <SectionHeader
-            iconClass="w-5 h-5 text-rose-500 dark:text-ctp-pink"
+            iconClass="w-5 h-5 text-danger "
             title="Profiling"
             hint={hasCpu && hasMem ? 'CPU + memory' : hasCpu ? 'CPU' : 'memory'}
             icon={
@@ -795,11 +767,11 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
           />
 
           {/* CPU/Memory toggle */}
-          <div className="inline-flex rounded-lg border border-gray-200 dark:border-ctp-surface1 p-0.5 mb-4 bg-gray-50 dark:bg-ctp-mantle">
+          <div className="inline-flex rounded-lg border border-line p-0.5 mb-4 bg-subtle">
             {hasCpu && (
               <button
                 onClick={() => setProfileTab('cpu')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${profileTab === 'cpu' ? 'bg-white dark:bg-ctp-surface1 text-gray-800 dark:text-ctp-text shadow-sm' : 'text-gray-500 dark:text-ctp-subtext0'}`}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${profileTab === 'cpu' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted'}`}
               >
                 CPU
               </button>
@@ -807,7 +779,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
             {hasMem && (
               <button
                 onClick={() => setProfileTab('mem')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${profileTab === 'mem' ? 'bg-white dark:bg-ctp-surface1 text-gray-800 dark:text-ctp-text shadow-sm' : 'text-gray-500 dark:text-ctp-subtext0'}`}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${profileTab === 'mem' ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted'}`}
               >
                 Memory
               </button>
@@ -823,14 +795,14 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
                 <ProfileTreemap entries={activeEntries} />
               </ChartCard>
               <div>
-                <h4 className="text-xs font-semibold text-gray-600 dark:text-ctp-subtext1 uppercase tracking-wide mb-2">
+                <h4 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-2">
                   Top Functions ({profileTab === 'cpu' ? 'self CPU' : 'self memory'})
                 </h4>
                 <ProfileTable entries={activeEntries} maxFlat={profileMaxFlat} unit={profileTab === 'cpu' ? 's' : 'MB'} />
               </div>
             </div>
           ) : (
-            <p className="text-sm text-gray-500 dark:text-ctp-subtext0 italic">No {profileTab === 'cpu' ? 'CPU' : 'memory'} profile data collected.</p>
+            <p className="text-sm text-fg-muted italic">No {profileTab === 'cpu' ? 'CPU' : 'memory'} profile data collected.</p>
           )}
         </section>
       )}
@@ -838,7 +810,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
       {/* Advice section */}
       <section>
         <SectionHeader
-          iconClass="w-5 h-5 text-amber-500 dark:text-ctp-peach"
+          iconClass="w-5 h-5 text-warning "
           title="Advice"
           icon={
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -854,39 +826,39 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
                 key={i}
                 className={`rounded-lg border px-4 py-3 text-sm ${
                   s.type === 'warning'
-                    ? 'bg-orange-50 dark:bg-ctp-surface0 border-orange-200 dark:border-ctp-surface1'
+                    ? 'bg-orange-soft border-orange/30'
                     : s.type === 'info'
-                    ? 'bg-blue-50 dark:bg-ctp-surface0 border-blue-200 dark:border-ctp-surface1'
-                    : 'bg-emerald-50 dark:bg-ctp-surface0 border-emerald-200 dark:border-ctp-surface1'
+                    ? 'bg-accent-soft border-accent/30'
+                    : 'bg-success-soft border-success/30'
                 }`}
               >
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5 shrink-0">
                     {s.type === 'warning' ? (
-                      <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg className="w-4 h-4 text-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86l-8.27 14.31A1 1 0 002.93 20h18.14a1 1 0 00.86-1.53l-8.27-14.31a1 1 0 00-1.72 0z" />
                       </svg>
                     ) : s.type === 'info' ? (
-                      <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg className="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
                       </svg>
                     ) : (
-                      <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg className="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                       </svg>
                     )}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-800 dark:text-ctp-text">{s.title}</div>
-                    <div className="text-gray-600 dark:text-ctp-subtext0 mt-0.5 leading-relaxed">{s.description}</div>
-                    {s.benchmark && <div className="text-xs font-mono text-gray-400 dark:text-ctp-subtext1 mt-1 truncate">{s.benchmark}</div>}
+                    <div className="font-medium text-fg">{s.title}</div>
+                    <div className="text-fg-muted mt-0.5 leading-relaxed">{s.description}</div>
+                    {s.benchmark && <div className="text-xs font-mono text-fg-subtle mt-1 truncate">{s.benchmark}</div>}
                   </div>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-500 dark:text-ctp-subtext0 italic">No advice generated. Collect benchmark or profile data to see suggestions.</p>
+          <p className="text-sm text-fg-muted italic">No advice generated. Collect benchmark or profile data to see suggestions.</p>
         )}
       </section>
 

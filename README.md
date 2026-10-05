@@ -81,17 +81,24 @@ gopolice config
 gopolice version
 ```
 
-Open `http://localhost:8580` in your browser after running `gopolice scan` or `gopolice serve`. The web UI lets you browse issues, tests, security findings, benchmarks, profile data, dependency graphs, git history, and trend charts — all from previous scans.
+Open `http://localhost:9393` in your browser after running `gopolice scan` or `gopolice serve`. The web UI lets you browse issues, tests, security findings, benchmarks, profile data, dependency graphs, git history, and trend charts — all from previous scans.
 
 ## Configuration
 
-Config is stored at `~/.config/gopolice/config.yaml`. The only user-configurable option is the port:
+Config is stored at `~/.config/gopolice/config.yaml`:
 
 ```yaml
-port: 8580
+port: 9393              # web UI port; the next free port is used if taken
+disabled_scanners:      # optional: scanners to skip
+  - benchmarks
+  - profile
 ```
 
+Scanner names: `lint`, `security`, `tests`, `benchmarks`, `profile`, `deadcode`, `depgraph`, `complexity`, `filestats`, `git`. Skipping `benchmarks` and `profile` makes scans much faster on projects with heavy benchmarks.
+
 To change the port, edit the file directly or use the **Config** page in the web UI.
+
+The web UI listens on localhost only, and its API rejects requests from other origins.
 
 ## Multi-module Workspaces
 

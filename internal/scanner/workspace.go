@@ -133,6 +133,9 @@ func RunWorkspaceScan(ctx context.Context, cfg *config.Config, progress chan<- P
 	for i, modDir := range moduleDirs {
 		modCfg := *cfg
 		modCfg.TargetDir = modDir
+		// Git info describes the whole repository, so it is collected once
+		// at the workspace root below rather than per module.
+		modCfg.DisabledScanners = append(append([]string(nil), cfg.DisabledScanners...), gitScannerName)
 
 		modName := moduleNames[i]
 		if progress != nil {
@@ -173,7 +176,11 @@ func RunWorkspaceScan(ctx context.Context, cfg *config.Config, progress chan<- P
 			combined.Benchmarks = append(combined.Benchmarks, result.Benchmarks...)
 		}
 		if result.Profile != nil {
-			combined.Profile = result.Profile
+			if combined.Profile == nil {
+				combined.Profile = &model.ProfileData{}
+			}
+			combined.Profile.CPU = append(combined.Profile.CPU, result.Profile.CPU...)
+			combined.Profile.Mem = append(combined.Profile.Mem, result.Profile.Mem...)
 		}
 		if result.DepGraph != nil {
 			if combined.DepGraph == nil {
@@ -181,9 +188,6 @@ func RunWorkspaceScan(ctx context.Context, cfg *config.Config, progress chan<- P
 			} else {
 				combined.DepGraph.Edges = append(combined.DepGraph.Edges, result.DepGraph.Edges...)
 			}
-		}
-		if result.GitInfo != nil {
-			combined.GitInfo = result.GitInfo
 		}
 		if result.FileStats != nil {
 			combined.FileStats = append(combined.FileStats, result.FileStats...)
@@ -193,6 +197,24 @@ func RunWorkspaceScan(ctx context.Context, cfg *config.Config, progress chan<- P
 		combined.TotalLines += result.TotalLines
 		if result.Deps != nil {
 			combined.Deps = append(combined.Deps, result.Deps...)
+		}
+	}
+
+	if combined.Profile != nil {
+		combined.Profile.CPU = mergeProfileEntries(combined.Profile.CPU)
+		combined.Profile.Mem = mergeProfileEntries(combined.Profile.Mem)
+	}
+
+	if cfg.ScannerEnabled(gitScannerName) {
+		gs := NewGitScanner()
+		if r, err := gs.Run(ctx, cfg, progress); err != nil {
+			if progress != nil {
+				progress <- ProgressEvent{Scanner: gs.Name(), Status: StatusFailed, Message: fmt.Sprintf("scanner failed: %v", err), Error: err}
+			}
+		} else if r != nil {
+			if gi, ok := r.Data.(*model.GitInfo); ok {
+				combined.GitInfo = gi
+			}
 		}
 	}
 

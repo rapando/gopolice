@@ -1,10 +1,24 @@
 import { ReactNode, useEffect, useState } from 'react'
+import {
+  FlaskConical, Gauge, GitBranch, Ghost, History, LayoutDashboard, LoaderCircle, Network,
+  Play, Settings, ShieldAlert, ShieldCheck, TriangleAlert, type LucideIcon,
+} from 'lucide-react'
 import { getVersion } from '../api/client'
-import ThemeSwitcher from './ThemeSwitcher'
+import { setProjectDir } from '../lib/editor'
+import { routeToHash, type Page } from '../lib/router'
+import ThemeToggle from './ThemeToggle'
+
+export interface NavCounts {
+  issues: number
+  errors: number
+  security: number
+  deadcode: number
+  failedTests: number
+}
 
 interface LayoutProps {
-  page: string
-  onNavigate: (page: string, param?: string) => void
+  page: Page
+  counts: NavCounts | null
   scanning: boolean
   onScan: () => void
   children: ReactNode
@@ -12,140 +26,203 @@ interface LayoutProps {
   onClearHistorical?: () => void
   projectName?: string
   scanTime?: string
+  branch?: string
 }
 
 interface NavItem {
-  id: string
+  page: Page
   label: string
-  icon: ReactNode
+  Icon: LucideIcon
+  /** Pages that highlight this nav item (detail views). */
+  also?: Page[]
+  count?: (c: NavCounts) => { value: number; tone: 'danger' | 'neutral' } | null
 }
 
-function StrokeIcon({ d }: { d: string }) {
-  return (
-    <svg className="w-4 h-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d={d} />
-    </svg>
-  )
-}
-
-const navItems: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
-  { id: 'issues', label: 'Issues', icon: '⚠' },
-  { id: 'security', label: 'Security', icon: <StrokeIcon d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /> },
-  { id: 'deadcode', label: 'Dead Code', icon: '✕' },
-  { id: 'tests', label: 'Tests', icon: '✓' },
-  { id: 'performance', label: 'Performance', icon: <StrokeIcon d="M3 13.125c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /> },
-  { id: 'depgraph', label: 'Dep Graph', icon: '◉' },
-  { id: 'git', label: 'Git', icon: '⬡' },
-  { id: 'history', label: 'History', icon: '↻' },
-  { id: 'config', label: 'Config', icon: '⚙' },
+const navGroups: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'Overview',
+    items: [{ page: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard }],
+  },
+  {
+    label: 'Analysis',
+    items: [
+      { page: 'issues', label: 'Issues', Icon: TriangleAlert, also: ['issue', 'file'],
+        count: (c) => c.issues ? { value: c.issues, tone: c.errors ? 'danger' : 'neutral' } : null },
+      { page: 'security', label: 'Security', Icon: ShieldAlert,
+        count: (c) => c.security ? { value: c.security, tone: 'danger' } : null },
+      { page: 'deadcode', label: 'Dead code', Icon: Ghost,
+        count: (c) => c.deadcode ? { value: c.deadcode, tone: 'neutral' } : null },
+      { page: 'tests', label: 'Tests', Icon: FlaskConical, also: ['testdetail'],
+        count: (c) => c.failedTests ? { value: c.failedTests, tone: 'danger' } : null },
+      { page: 'performance', label: 'Performance', Icon: Gauge },
+    ],
+  },
+  {
+    label: 'Project',
+    items: [
+      { page: 'depgraph', label: 'Dependencies', Icon: Network },
+      { page: 'git', label: 'Git', Icon: GitBranch },
+      { page: 'history', label: 'History', Icon: History },
+    ],
+  },
 ]
 
-export default function Layout({ page, onNavigate, scanning, onScan, children, historicalLabel, onClearHistorical, projectName, scanTime }: LayoutProps) {
+const allItems = [...navGroups.flatMap((g) => g.items), { page: 'config' as Page, label: 'Settings', Icon: Settings }]
+
+function timeAgo(iso: string): string {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+  return `${Math.floor(s / 86400)}d ago`
+}
+
+export default function Layout({ page, counts, scanning, onScan, children, historicalLabel, onClearHistorical, projectName, scanTime, branch }: LayoutProps) {
   const [version, setVersion] = useState('')
+  const [, tick] = useState(0)
 
   useEffect(() => {
-    const oldTheme = localStorage.getItem('theme')
-    let scheme = localStorage.getItem('scheme')
-    let dark: boolean
+    getVersion().then((r) => {
+      setVersion(r.version)
+      if (r.project_dir) setProjectDir(r.project_dir)
+    }).catch(() => {})
+    // keep "scanned 3m ago" fresh
+    const id = setInterval(() => tick((n) => n + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
 
-    if (oldTheme === 'dark' || oldTheme === 'light') {
-      dark = oldTheme === 'dark'
-      scheme = scheme || 'catppuccin'
-      localStorage.setItem('scheme', scheme)
-      localStorage.setItem('dark', String(dark))
-      localStorage.removeItem('theme')
-    } else {
-      scheme = scheme || 'catppuccin'
-      dark = localStorage.getItem('dark') === 'true' ||
-        (localStorage.getItem('dark') === null && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  // "/" focuses the page's search/filter box, like most developer tools.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement
+      if (t.closest('input, textarea, select, [contenteditable="true"]')) return
+      const input = document.querySelector<HTMLInputElement>('main input[type="search"], main input[type="text"]')
+      if (input) {
+        e.preventDefault()
+        input.focus()
+        input.select()
+      }
     }
-
-    document.documentElement.setAttribute('data-theme', scheme)
-    document.documentElement.classList.toggle('dark', dark)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  useEffect(() => {
-    getVersion().then((r) => setVersion(r.version)).catch(() => {})
-  }, [])
+  const current = allItems.find((i) => i.page === page || i.also?.includes(page))
 
   return (
-    <div className="flex h-screen">
-      {/* Sidebar */}
-      <aside className="w-56 shrink-0 bg-white dark:bg-ctp-mantle border-r border-gray-200 dark:border-ctp-surface1 flex flex-col">
-        <div className="px-5 py-4 border-b border-gray-100 dark:border-ctp-surface1">
-          <h1 className="font-bold text-base tracking-tight text-gray-800 dark:text-ctp-text">gopolice</h1>
-          {projectName && (
-            <p className="mt-1 text-xs text-gray-500 dark:text-ctp-subtext0 truncate" title={projectName}>{projectName}</p>
-          )}
-          {scanTime && (
-            <p className="text-[11px] text-gray-400 dark:text-ctp-subtext1">Scanned {new Date(scanTime).toLocaleString()}</p>
-          )}
+    <div className="flex h-screen bg-canvas text-fg">
+      <aside className="w-60 shrink-0 bg-surface border-r border-line flex flex-col">
+        <div className="h-14 px-4 flex items-center gap-2 border-b border-line">
+          <ShieldCheck className="w-5 h-5 text-accent" aria-hidden="true" />
+          <span className="font-mono font-semibold text-[15px] tracking-tight">gopolice</span>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-2">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => onNavigate(item.id)}
-              aria-current={page === item.id ? 'page' : undefined}
-              className={`w-full flex items-center gap-3 px-5 py-2.5 text-sm transition-colors text-left ${
-                page === item.id
-                  ? 'bg-blue-50 text-blue-600 font-medium border-r-2 border-blue-500 dark:bg-ctp-base dark:text-ctp-lavender dark:border-ctp-lavender'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-ctp-subtext0 dark:hover:bg-ctp-base dark:hover:text-ctp-text'
-              }`}
-            >
-              <span className="text-sm w-5 text-center shrink-0">{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
+        {projectName && (
+          <div className="px-4 py-3 border-b border-line">
+            <p className="font-mono text-sm font-medium truncate" title={projectName}>{projectName}</p>
+            <div className="mt-1 flex items-center gap-2 text-xs text-fg-muted">
+              {branch && (
+                <span className="inline-flex items-center gap-1 min-w-0">
+                  <GitBranch className="w-3 h-3 shrink-0" aria-hidden="true" />
+                  <span className="font-mono truncate">{branch}</span>
+                </span>
+              )}
+              {scanTime && (
+                <span className="shrink-0" title={new Date(scanTime).toLocaleString()}>· {timeAgo(scanTime)}</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4" aria-label="Main">
+          {navGroups.map((group) => (
+            <div key={group.label}>
+              <p className="px-2 mb-1 text-xs font-medium text-fg-subtle">{group.label}</p>
+              <ul className="space-y-0.5">
+                {group.items.map((item) => (
+                  <NavLink key={item.page} item={item} active={item === current} counts={counts} />
+                ))}
+              </ul>
+            </div>
           ))}
         </nav>
 
-        <div className="px-5 py-3 border-t border-gray-100 dark:border-ctp-surface1 text-[11px] text-gray-400 dark:text-ctp-subtext1">
-          {version && <div>{version}</div>}
-          <div>&copy; Rapando</div>
+        <div className="px-2 py-2 border-t border-line">
+          <ul>
+            <NavLink item={allItems[allItems.length - 1]} active={page === 'config'} counts={counts} />
+          </ul>
+          <div className="mt-2 px-2 flex items-center justify-between">
+            <span className="text-xs text-fg-subtle font-mono truncate">{version}</span>
+            <ThemeToggle />
+          </div>
         </div>
       </aside>
 
-      {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top bar */}
-        <header className="bg-white dark:bg-ctp-mantle border-b border-gray-200 dark:border-ctp-surface1 flex items-center shrink-0 px-5 h-12">
+        <header className="h-14 shrink-0 bg-surface border-b border-line flex items-center gap-3 px-6">
+          <h1 className="text-base font-semibold truncate">{current?.label ?? ''}</h1>
           <div className="flex-1" />
-          <div className="flex items-center gap-3">
-            <ThemeSwitcher />
+          <span className="hidden md:inline text-xs text-fg-subtle">
+            Press <kbd className="kbd">/</kbd> to search
+          </span>
+          <button onClick={onScan} disabled={scanning} className="btn-primary min-w-[7.5rem]">
             {scanning ? (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-400 dark:text-ctp-subtext0 bg-gray-100 dark:bg-ctp-surface1 rounded cursor-not-allowed select-none">
-                <span className="w-3 h-3 rounded-full border-2 border-gray-300 dark:border-ctp-overlay0 border-t-transparent animate-spin" />
-                <span className="hidden sm:inline">Scanning</span>
-              </span>
+              <>
+                <LoaderCircle className="w-4 h-4 animate-spin" aria-hidden="true" />
+                Scanning…
+              </>
             ) : (
-              <button
-                onClick={onScan}
-                className="px-4 py-1.5 text-sm font-medium bg-green-600 hover:bg-green-700 rounded transition-colors text-white dark:bg-ctp-green dark:text-ctp-base dark:hover:bg-ctp-teal"
-              >
-                Run Scan
-              </button>
+              <>
+                <Play className="w-4 h-4" aria-hidden="true" />
+                Run scan
+              </>
             )}
-          </div>
+          </button>
         </header>
 
         {historicalLabel && (
-          <div className="shrink-0 px-5 py-2 bg-yellow-50 border-b border-yellow-200 flex items-center justify-between text-sm dark:bg-ctp-surface0 dark:border-ctp-surface1">
-            <p className="text-yellow-800 dark:text-ctp-yellow">
-              <span className="font-medium">Historical:</span> {historicalLabel}
+          <div className="shrink-0 px-6 py-2 bg-warning-soft border-b border-warning/30 flex items-center justify-between gap-4 text-sm">
+            <p className="text-warning">
+              <History className="inline w-4 h-4 mr-1.5 -mt-0.5" aria-hidden="true" />
+              Viewing a past scan: <span className="font-medium">{historicalLabel}</span>
             </p>
-            <button
-              onClick={onClearHistorical}
-              className="text-xs font-medium text-yellow-700 hover:text-yellow-900 dark:text-ctp-yellow dark:hover:text-ctp-text underline"
-            >
-              Back to current
+            <button onClick={onClearHistorical} className="btn-secondary py-1">
+              Back to latest
             </button>
           </div>
         )}
 
-        <main className="flex-1 overflow-auto bg-gray-50 dark:bg-ctp-base">{children}</main>
+        <main className="flex-1 overflow-auto">{children}</main>
       </div>
     </div>
+  )
+}
+
+function NavLink({ item, active, counts }: { item: NavItem; active: boolean; counts: NavCounts | null }) {
+  const badge = counts && item.count ? item.count(counts) : null
+  const { Icon } = item
+  return (
+    <li>
+      <a
+        href={routeToHash({ page: item.page })}
+        aria-current={active ? 'page' : undefined}
+        className={`flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors ${
+          active ? 'bg-accent-soft text-accent font-medium' : 'text-fg-muted hover:bg-subtle hover:text-fg'
+        }`}
+      >
+        <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+        <span className="flex-1 truncate">{item.label}</span>
+        {badge && (
+          <span
+            className={`min-w-[1.5rem] px-1.5 rounded-full text-center text-xs font-medium tabular-nums ${
+              badge.tone === 'danger' ? 'bg-danger-soft text-danger' : 'bg-subtle text-fg-muted'
+            }`}
+          >
+            {badge.value}
+          </span>
+        )}
+      </a>
+    </li>
   )
 }

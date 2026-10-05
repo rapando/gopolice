@@ -171,3 +171,16 @@ func BenchmarkSaveAndLoadConfig(b *testing.B) {
 		_, _ = config.LoadConfigFile(path)
 	}
 }
+
+func TestScannerEnabled(t *testing.T) {
+	cfg := &config.Config{DisabledScanners: []string{"bench", "profile"}}
+	if cfg.ScannerEnabled("bench") || cfg.ScannerEnabled("profile") {
+		t.Error("expected bench and profile to be disabled")
+	}
+	if !cfg.ScannerEnabled("lint") {
+		t.Error("expected lint to be enabled")
+	}
+	if !config.DefaultConfig().ScannerEnabled("lint") {
+		t.Error("expected all scanners enabled by default")
+	}
+}

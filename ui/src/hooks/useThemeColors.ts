@@ -1,77 +1,85 @@
 import { useEffect, useState } from 'react'
 
 // D3/Recharts/SVG need resolved color strings (not Tailwind classes), and the
-// app's theme is applied by toggling `data-theme`/`.dark` on <html> — so chart
-// code can't simply rely on CSS cascade. This hook snapshots the active
-// theme's CSS custom properties and re-reads them whenever the theme changes,
-// letting visualizations stay in sync with Catppuccin/Nord/Dracula/Gruvbox.
+// light/dark mode is applied by toggling `.dark` on <html>, so chart code can't
+// rely on the CSS cascade. This hook resolves the design tokens from index.css
+// to hex and re-reads them whenever the mode changes.
 export interface ThemeColors {
-  bg: string
+  canvas: string
   surface: string
-  surface1: string
-  surface2: string
+  /** Gridlines, borders, separators. */
   border: string
   text: string
+  /** Axis tick labels and secondary chart text. */
+  axis: string
+  /** Recessive marks and tertiary text. */
   muted: string
-  overlay0: string
-  overlay1: string
-  red: string
-  maroon: string
-  yellow: string
-  peach: string
-  green: string
-  teal: string
-  blue: string
-  sapphire: string
-  sky: string
-  lavender: string
-  mauve: string
-  pink: string
-  flamingo: string
+  accent: string
+  /** Status marks: pass / caution / fail. Pair with a label, never color alone. */
+  good: string
+  warn: string
+  bad: string
+  /** Severity encodings matching the text tokens used in badges. */
+  danger: string
+  warning: string
+  info: string
+  /** Categorical series colors in fixed order. Never cycle: fold extras into `other`. */
+  series: string[]
+  /** Color for the "Other" bucket once series are exhausted. */
+  other: string
 }
 
-const VAR_MAP: Record<keyof ThemeColors, string> = {
-  bg: '--theme-bg',
-  surface: '--theme-surface',
-  surface1: '--ctp-surface1',
-  surface2: '--ctp-surface2',
-  border: '--theme-border',
-  text: '--theme-text',
-  muted: '--theme-muted',
-  overlay0: '--ctp-overlay0',
-  overlay1: '--ctp-overlay1',
-  red: '--ctp-red',
-  maroon: '--ctp-maroon',
-  yellow: '--ctp-yellow',
-  peach: '--ctp-peach',
-  green: '--ctp-green',
-  teal: '--ctp-teal',
-  blue: '--ctp-blue',
-  sapphire: '--ctp-sapphire',
-  sky: '--ctp-sky',
-  lavender: '--ctp-lavender',
-  mauve: '--ctp-mauve',
-  pink: '--ctp-pink',
-  flamingo: '--ctp-flamingo',
+const SINGLE: Record<Exclude<keyof ThemeColors, 'series'>, string> = {
+  canvas: '--canvas',
+  surface: '--surface',
+  border: '--line',
+  text: '--fg',
+  axis: '--fg-muted',
+  muted: '--fg-subtle',
+  accent: '--accent',
+  good: '--status-good',
+  warn: '--status-warn',
+  bad: '--status-bad',
+  danger: '--danger',
+  warning: '--warning',
+  info: '--accent',
+  other: '--line-strong',
+}
+
+const SERIES_COUNT = 8
+
+function toHex(channels: string): string {
+  const parts = channels.trim().split(/\s+/).map(Number)
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return '#888888'
+  return '#' + parts.map((n) => n.toString(16).padStart(2, '0')).join('')
 }
 
 function readThemeColors(): ThemeColors {
   const style = getComputedStyle(document.documentElement)
-  const out = {} as ThemeColors
-  for (const key of Object.keys(VAR_MAP) as (keyof ThemeColors)[]) {
-    out[key] = style.getPropertyValue(VAR_MAP[key]).trim()
+  const read = (v: string) => toHex(style.getPropertyValue(v))
+  const out = { series: [] as string[] } as ThemeColors
+  for (const key of Object.keys(SINGLE) as (keyof typeof SINGLE)[]) {
+    out[key] = read(SINGLE[key])
   }
+  for (let i = 1; i <= SERIES_COUNT; i++) out.series.push(read(`--series-${i}`))
   return out
 }
 
-/** Returns the current theme's resolved colors, updating when the user switches scheme or light/dark mode. */
+/** Assigns series colors to keys in order, folding anything past the palette into `other`. */
+export function seriesColorMap(keys: string[], colors: ThemeColors): Map<string, string> {
+  const m = new Map<string, string>()
+  keys.forEach((k, i) => m.set(k, i < colors.series.length ? colors.series[i] : colors.other))
+  return m
+}
+
+/** Returns the current theme's resolved colors, updating when light/dark mode changes. */
 export function useThemeColors(): ThemeColors {
   const [colors, setColors] = useState<ThemeColors>(readThemeColors)
 
   useEffect(() => {
     const update = () => setColors(readThemeColors())
     const observer = new MutationObserver(update)
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
     return () => observer.disconnect()
   }, [])
 

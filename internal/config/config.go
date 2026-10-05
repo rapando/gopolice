@@ -7,15 +7,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DefaultPort is the web UI port used when none is configured.
+const DefaultPort = 9393
+
 type Config struct {
 	Port int `yaml:"port" json:"port"`
+
+	// DisabledScanners lists scanner names (e.g. "benchmarks", "profile") to skip.
+	DisabledScanners []string `yaml:"disabled_scanners,omitempty" json:"disabled_scanners,omitempty"`
 
 	TargetDir string `yaml:"-" json:"-"`
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		Port: 9393,
+		Port: DefaultPort,
 	}
 }
 
@@ -66,7 +72,18 @@ func DefaultLoadConfig() (*Config, error) {
 			if fc.Port != 0 {
 				cfg.Port = fc.Port
 			}
+			cfg.DisabledScanners = fc.DisabledScanners
 		}
 	}
 	return cfg, nil
+}
+
+// ScannerEnabled reports whether the named scanner is not disabled.
+func (c *Config) ScannerEnabled(name string) bool {
+	for _, d := range c.DisabledScanners {
+		if d == name {
+			return false
+		}
+	}
+	return true
 }

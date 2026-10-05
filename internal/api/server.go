@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -33,6 +34,7 @@ type Server struct {
 	projectDir  string
 	mux         *http.ServeMux
 	server      *http.Server
+	listeners   []net.Listener
 	uiFS        fs.FS
 	version     string
 	scanMu      sync.Mutex
@@ -100,25 +102,71 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /", s.handleStatic)
 }
 
-func (s *Server) Start(port int) (int, error) {
+// Listen binds the UI to the loopback interfaces, starting at port and trying
+// successive ports if it is taken. It returns the port actually bound; call
+// Serve afterwards to start handling requests.
+func (s *Server) Listen(port int) (int, error) {
+	if port == 0 {
+		port = config.DefaultPort
+	}
 	maxAttempts := 100
 	for attempt := range maxAttempts {
-		addr := fmt.Sprintf(":%d", port+attempt)
-		listener, err := net.Listen("tcp", addr)
+		listeners, err := listenLoopback(port + attempt)
 		if err == nil {
+			s.listeners = listeners
 			s.server = &http.Server{
-				Handler:           corsMiddleware(s.mux),
+				Handler:           localOnlyMiddleware(s.mux),
 				ReadHeaderTimeout: 10 * time.Second,
 			}
-			actualPort := port + attempt
-			log.Printf("gopolice UI available at http://localhost:%d", actualPort)
-			return actualPort, s.server.Serve(listener)
+			return port + attempt, nil
 		}
 		if !isAddrInUse(err) {
 			return 0, err
 		}
 	}
 	return 0, fmt.Errorf("no available port found after %d attempts", maxAttempts)
+}
+
+// listenLoopback binds port on both 127.0.0.1 and ::1, since "localhost" may
+// resolve to either. Binding only one would let another process holding the
+// other address (or a wildcard bind, which some platforms allow alongside a
+// specific one) answer requests meant for us. ::1 is skipped if the host has
+// no IPv6 loopback.
+func listenLoopback(port int) ([]net.Listener, error) {
+	p := strconv.Itoa(port)
+	v4, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", p))
+	if err != nil {
+		return nil, err
+	}
+	v6, err := net.Listen("tcp", net.JoinHostPort("::1", p))
+	if err != nil {
+		if isAddrInUse(err) {
+			_ = v4.Close()
+			return nil, err
+		}
+		return []net.Listener{v4}, nil
+	}
+	return []net.Listener{v4, v6}, nil
+}
+
+// Serve handles requests on the listeners bound by Listen until Shutdown is
+// called, in which case it returns nil.
+func (s *Server) Serve() error {
+	if len(s.listeners) == 0 {
+		return errors.New("server not listening: call Listen first")
+	}
+	errCh := make(chan error, len(s.listeners))
+	for _, l := range s.listeners {
+		go func() { errCh <- s.server.Serve(l) }()
+	}
+	var firstErr error
+	for range s.listeners {
+		if err := <-errCh; !errors.Is(err, http.ErrServerClosed) && firstErr == nil {
+			firstErr = err
+			_ = s.server.Close()
+		}
+	}
+	return firstErr
 }
 
 func isAddrInUse(err error) bool {
@@ -153,17 +201,48 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+// localOnlyMiddleware restricts the API to the embedded UI. The server can
+// modify source files (fixes) and run commands (scans), so it must not be
+// reachable from other websites the user happens to have open:
+//   - the Host header must be a loopback name, which blocks DNS rebinding;
+//   - state-changing requests must not come from a different origin, which
+//     blocks cross-site form posts and no-cors fetches.
+//
+// No CORS headers are sent, so browsers keep their same-origin protections.
+func localOnlyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
+		if !isLoopbackHost(r.Host) {
+			jsonError(w, http.StatusForbidden, "forbidden host")
 			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+				jsonError(w, http.StatusForbidden, "cross-site request rejected")
+				return
+			}
+			if origin := r.Header.Get("Origin"); origin != "" {
+				u, err := url.Parse(origin)
+				if err != nil || u.Host != r.Host {
+					jsonError(w, http.StatusForbidden, "cross-origin request rejected")
+					return
+				}
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isLoopbackHost(hostport string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func jsonResponse(w http.ResponseWriter, status int, data interface{}) {
@@ -179,7 +258,8 @@ func jsonError(w http.ResponseWriter, status int, msg string) {
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, http.StatusOK, map[string]string{"version": s.version})
+	// project_dir lets the UI build "open in editor" links from relative paths.
+	jsonResponse(w, http.StatusOK, map[string]string{"version": s.version, "project_dir": s.projectDir})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

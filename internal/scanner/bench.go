@@ -38,7 +38,7 @@ func (s *BenchmarkScanner) Run(ctx context.Context, cfg *config.Config, progress
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "go", "test", "-bench=.", "-benchmem", "-count=1", "./...")
+	cmd := exec.CommandContext(ctx, "go", "test", "-run=^$", "-bench=.", "-benchmem", "-count=1", "./...")
 	cmd.Dir = projectDir
 	output, err := cmd.CombinedOutput()
 	if err != nil {

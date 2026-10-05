@@ -1,67 +1,27 @@
 import { Issue } from '../api/client'
-import { severityIcon, severityTextClass } from '../lib/severity'
 import EmptyState from '../components/EmptyState'
+import IssueTable from '../components/IssueTable'
 
 interface Props {
   issues: Issue[]
-  onSelectIssue?: (id: string) => void
+  onSelectIssue: (id: string) => void
   onSelectFile?: (file: string) => void
   onScan?: () => void
   scanning?: boolean
 }
 
-export default function DeadCode({ issues, onSelectIssue, onSelectFile, onScan, scanning }: Props) {
+export default function DeadCode({ issues, onSelectIssue, onSelectFile }: Props) {
   const deadIssues = issues.filter((i) => i.category === 'deadcode')
 
   return (
     <div className="max-w-6xl mx-auto p-8">
-      <h2 className="text-lg font-bold text-gray-800 dark:text-ctp-text mb-5">
-        Dead Code <span className="font-normal text-gray-400 dark:text-ctp-subtext1">({deadIssues.length})</span>
-      </h2>
-
+      <p className="text-sm text-fg-muted mb-4">
+        Unused functions, types, constants and variables reported by <code className="font-mono">staticcheck</code> (U1000).
+      </p>
       {deadIssues.length === 0 ? (
-        <EmptyState message="No dead code issues found." onScan={onScan} scanning={scanning} />
+        <EmptyState tone="clean" message="No dead code found" />
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50 dark:bg-ctp-mantle">
-                <th className="text-left px-5 py-2.5 font-medium text-gray-500 dark:text-ctp-subtext0 text-xs uppercase tracking-wide">Severity</th>
-                <th className="text-left px-5 py-2.5 font-medium text-gray-500 dark:text-ctp-subtext0 text-xs uppercase tracking-wide">Rule</th>
-                <th className="text-left px-5 py-2.5 font-medium text-gray-500 dark:text-ctp-subtext0 text-xs uppercase tracking-wide">Description</th>
-                <th className="text-left px-5 py-2.5 font-medium text-gray-500 dark:text-ctp-subtext0 text-xs uppercase tracking-wide">File</th>
-                <th className="text-right px-5 py-2.5 font-medium text-gray-500 dark:text-ctp-subtext0 text-xs uppercase tracking-wide">Line</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {deadIssues.map((issue) => (
-                <tr key={issue.id} className="hover:bg-gray-50 dark:hover:bg-ctp-surface0 transition-colors group">
-                  <td className="px-5 py-3">
-                    <span className={severityTextClass(issue.severity)}>{severityIcon(issue.severity)}</span>
-                  </td>
-                  <td className="px-5 py-3 font-mono text-xs text-gray-500 dark:text-ctp-subtext1">{issue.rule}</td>
-                  <td className="px-5 py-3 text-gray-700 dark:text-ctp-subtext1">
-                    <button
-                      onClick={() => onSelectIssue?.(issue.id)}
-                      className="hover:text-blue-600 dark:hover:text-ctp-blue text-left"
-                    >
-                      {issue.message}
-                    </button>
-                  </td>
-                  <td className="px-5 py-3">
-                    <button
-                      onClick={() => onSelectFile?.(issue.file)}
-                      className="text-xs font-mono text-gray-500 hover:text-blue-600 dark:text-ctp-subtext1 dark:hover:text-ctp-blue"
-                    >
-                      {issue.file}
-                    </button>
-                  </td>
-                  <td className="px-5 py-3 text-right text-xs text-gray-400 dark:text-ctp-overlay2">{issue.line}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <IssueTable issues={deadIssues} onSelectIssue={onSelectIssue} onSelectFile={onSelectFile} />
       )}
     </div>
   )

@@ -1,11 +1,8 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/rapando/gopolice/internal/api"
@@ -29,6 +26,9 @@ func NewServeCommand() *cobra.Command {
 			}
 
 			cfg.TargetDir = "."
+			if port > 0 {
+				cfg.Port = port
+			}
 
 			cachePath := cache.ResultPath(cfg.TargetDir)
 			if _, err := os.Stat(cachePath); os.IsNotExist(err) {
@@ -40,45 +40,27 @@ func NewServeCommand() *cobra.Command {
 				return fmt.Errorf("load cache: %w", err)
 			}
 
-			server := api.NewServerWithResult(cfg, uiFS, cachedResult, GetVersion())
-			if port > 0 {
-				cfg.Port = port
-			}
-			uiPort := cfg.Port
-			if uiPort == 0 {
-				uiPort = 9393
-			}
+			ctx, cancel := signalContext()
+			defer cancel()
 
-			fmt.Fprintf(os.Stderr, "Serving cached result from %s\n", cachePath)
-			fmt.Fprintf(os.Stderr, "Web UI at http://localhost:%d\n", uiPort)
+			server := api.NewServerWithResult(cfg, uiFS, cachedResult, GetVersion())
+			c.PrintErrf("Serving cached result from %s\n", cachePath)
+			if _, err := startServer(c, server, cfg.Port); err != nil {
+				return err
+			}
 
 			if watch {
 				w, err := server.Watch(500 * time.Millisecond)
 				if err != nil {
+					_ = shutdownServer(c, server)
 					return fmt.Errorf("file watcher: %w", err)
 				}
 				defer func() { _ = w.Stop() }()
-				fmt.Fprintf(os.Stderr, "Watching .go files for changes (--watch enabled)\n")
+				c.PrintErr("Watching .go files for changes (--watch enabled)\n")
 			}
 
-			sigCh := make(chan os.Signal, 1)
-			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-			go func() {
-				<-sigCh
-				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer shutdownCancel()
-				_ = server.Shutdown(shutdownCtx)
-			}()
-
-			actualPort, err := server.Start(uiPort)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintf(os.Stderr, "Web UI at http://localhost:%d\n", actualPort)
-			// block until signal
-			<-sigCh
-			return nil
+			<-ctx.Done()
+			return shutdownServer(c, server)
 		},
 	}
 
