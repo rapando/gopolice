@@ -141,9 +141,19 @@ export interface FileStat {
 export interface ProgressEvent {
   scanner: string
   status: string
-  message: string
-  error: string | null
-  elapsed: number
+  message?: string
+  error?: string | null
+  /** Nanoseconds (Go time.Duration). */
+  elapsed?: number
+  /** Item-level progress: `done` of `total` `unit`, currently on `detail`. */
+  done?: number
+  total?: number
+  unit?: string
+  detail?: string
+  /** Every scanner the pipeline will run (on pipeline events). */
+  steps?: string[]
+  /** Position in the scan's event log; lets a replayed stream be de-duplicated. */
+  seq?: number
 }
 
 export interface FixResult {
@@ -309,6 +319,15 @@ export function getVersion(): Promise<{ version: string; project_dir?: string }>
 
 export function healthCheck(): Promise<{ status: string }> {
   return request('/api/health')
+}
+
+export interface ScanProgressSnapshot {
+  scanning: boolean
+  events: ProgressEvent[]
+}
+
+export function getScanProgress(): Promise<ScanProgressSnapshot> {
+  return request('/api/scan/progress')
 }
 
 export function triggerScan(): Promise<{ status: string }> {

@@ -53,14 +53,24 @@ func (p *Pipeline) Run(ctx context.Context, cfg *config.Config, progress chan<- 
 	}
 
 	enabledScanners := p.filterEnabled(cfg)
+	steps := make([]string, len(enabledScanners))
+	for i, s := range enabledScanners {
+		steps[i] = s.Name()
+	}
+	if progress != nil {
+		progress <- ProgressEvent{Scanner: "pipeline", Status: StatusRunning, Message: fmt.Sprintf("Running %d scanners", len(steps)), Total: len(steps), Unit: "scanners", Steps: steps}
+	}
 
-	for _, s := range enabledScanners {
+	for i, s := range enabledScanners {
 		select {
 		case <-ctx.Done():
 			return result, ctx.Err()
 		default:
 		}
 
+		if progress != nil {
+			progress <- ProgressEvent{Scanner: "pipeline", Status: StatusRunning, Done: i, Total: len(steps), Unit: "scanners", Detail: s.Name(), Steps: steps}
+		}
 		r, err := s.Run(ctx, cfg, progress)
 		if err != nil {
 			if progress != nil {

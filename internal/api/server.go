@@ -176,6 +176,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 	s.route("POST /api/scan", (*project).handleScan)
 	s.route("GET /api/scan/status", (*project).handleScanStatus)
+	s.route("GET /api/scan/progress", (*project).handleScanProgress)
 	s.route("GET /api/results", (*project).handleGetResults)
 	s.route("GET /api/results/issues", (*project).handleGetIssue)
 	s.route("GET /api/results/tests", (*project).handleGetTests)
@@ -440,6 +441,15 @@ func (p *project) handleScan(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusAccepted, map[string]string{"status": "scan_started"})
 }
 
+// handleScanProgress returns the current scan's recorded events as JSON, for
+// clients that want a snapshot instead of a stream.
+func (p *project) handleScanProgress(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"scanning": p.scanning(),
+		"events":   p.log.snapshot(),
+	})
+}
+
 func (p *project) handleScanStatus(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -451,8 +461,14 @@ func (p *project) handleScanStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	ch := p.broadcaster.Subscribe()
-	defer p.broadcaster.Unsubscribe(ch)
+	// Replay what this scan has reported so far, then stream the rest.
+	recorded, ch := p.log.attach()
+	defer p.log.detach(ch)
+	for _, event := range recorded {
+		data, _ := json.Marshal(event)
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+	}
+	flusher.Flush()
 
 	for {
 		select {

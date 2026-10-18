@@ -17,12 +17,12 @@ import (
 // project is one repository the server can scan: its config, latest result,
 // and the subscribers watching its scan progress.
 type project struct {
-	id          string
-	name        string
-	dir         string
-	cfg         *config.Config
-	store       *Store
-	broadcaster *SSEBroadcaster
+	id    string
+	name  string
+	dir   string
+	cfg   *config.Config
+	store *Store
+	log   *scanLog
 
 	scanMu      sync.Mutex
 	scanRunning bool
@@ -32,12 +32,12 @@ func newProject(id, name, dir string, base *config.Config) *project {
 	cfg := *base
 	cfg.TargetDir = dir
 	return &project{
-		id:          id,
-		name:        name,
-		dir:         dir,
-		cfg:         &cfg,
-		store:       NewStore(),
-		broadcaster: NewSSEBroadcaster(),
+		id:    id,
+		name:  name,
+		dir:   dir,
+		cfg:   &cfg,
+		store: NewStore(),
+		log:   newScanLog(),
 	}
 }
 
@@ -61,7 +61,7 @@ func (p *project) TriggerScan(ctx context.Context) {
 }
 
 func (p *project) fail(msg string) {
-	p.broadcaster.Broadcast(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusFailed, Message: msg})
+	p.log.emit(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusFailed, Message: msg})
 }
 
 func (p *project) runScan(ctx context.Context) {
@@ -81,7 +81,8 @@ func (p *project) runScan(ctx context.Context) {
 	}()
 
 	start := time.Now()
-	p.broadcaster.Broadcast(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusStarted, Message: "Starting scan"})
+	p.log.reset()
+	p.log.emit(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusStarted, Message: "Starting scan"})
 
 	type outcome struct {
 		result *model.ScanResult
@@ -101,7 +102,7 @@ func (p *project) runScan(ctx context.Context) {
 	for {
 		select {
 		case event := <-progress:
-			p.broadcaster.Broadcast(event)
+			p.log.emit(event)
 		case o := <-done:
 			if o.err != nil || o.result == nil {
 				msg := "scan produced no result"
@@ -123,7 +124,7 @@ func (p *project) runScan(ctx context.Context) {
 				log.Printf("history save: %v", err)
 			}
 
-			p.broadcaster.Broadcast(scanner.ProgressEvent{
+			p.log.emit(scanner.ProgressEvent{
 				Scanner: "pipeline",
 				Status:  scanner.StatusCompleted,
 				Message: fmt.Sprintf("Scan complete: %d issues found, took %v", len(result.Issues), result.Duration),

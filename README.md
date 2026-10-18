@@ -96,7 +96,11 @@ gopolice service -p 8080    # choose the port
 - **Open repositories** from the UI (folder picker or pasted path). They are
   saved in `~/.config/gopolice/projects.json` and listed on the next start.
 - **Scan** any saved repository from its card or from its dashboard. Each
-  repository keeps its own latest result and scan history.
+  repository keeps its own latest result and scan history. Starting a scan
+  opens a progress window that lists every scanner with live counts (for
+  example *12 of 96 tests*, *3 of 9 packages profiled*), the tool each step is
+  running, and a log. Close it and the scan keeps going; the *Scanning…*
+  button reopens it, and reloading the page mid-scan shows it again.
 - **Sign in (macOS, default):** with your macOS account password, or with
   Touch ID. The Touch ID prompt appears on the Mac running the service, so it
   is only offered when you browse from that machine. Only the user who started

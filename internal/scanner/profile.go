@@ -35,7 +35,8 @@ func (s *ProfileScanner) Run(ctx context.Context, cfg *config.Config, progress c
 		projectDir = "."
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Profiling (CPU + memory)"}
+	t := newTracker(progress, s.Name())
+	t.started("Profiling (CPU + memory)")
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -45,18 +46,20 @@ func (s *ProfileScanner) Run(ctx context.Context, cfg *config.Config, progress c
 		return nil, fmt.Errorf("list packages: %w", err)
 	}
 	if len(pkgs) == 0 {
-		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: "No packages with test files to profile", Elapsed: time.Since(start)}
+		t.completed("No packages with test files to profile")
 		return &Result{ScannerName: s.Name(), Duration: time.Since(start)}, nil
 	}
 
 	data := &model.ProfileData{}
+	t.step(0, len(pkgs), "packages", fmt.Sprintf("Profiling %d packages", len(pkgs)), "")
 
-	for _, pkg := range pkgs {
+	for i, pkg := range pkgs {
 		select {
 		case <-ctx.Done():
 			return &Result{ScannerName: s.Name(), Duration: time.Since(start), Data: data}, ctx.Err()
 		default:
 		}
+		t.tick(i, len(pkgs), "packages", pkg, true)
 
 		tmpDir, err := os.MkdirTemp("", "gopolice-profile-*")
 		if err != nil {
@@ -88,7 +91,7 @@ func (s *ProfileScanner) Run(ctx context.Context, cfg *config.Config, progress c
 	data.Mem = mergeProfileEntries(data.Mem)
 
 	count := len(data.CPU) + len(data.Mem)
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Profiled %d functions (CPU: %d, Mem: %d)", count, len(data.CPU), len(data.Mem)), Elapsed: time.Since(start)}
+	t.completedf("Profiled %d functions (CPU: %d, Mem: %d)", count, len(data.CPU), len(data.Mem))
 	return &Result{
 		ScannerName: s.Name(),
 		Duration:    time.Since(start),

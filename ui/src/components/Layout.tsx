@@ -21,6 +21,8 @@ interface LayoutProps {
   counts: NavCounts | null
   scanning: boolean
   onScan: () => void
+  /** Reopens the progress window while a scan runs. */
+  onShowScan?: () => void
   children: ReactNode
   historicalLabel?: string | null
   onClearHistorical?: () => void
@@ -79,7 +81,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`
 }
 
-export default function Layout({ page, counts, scanning, onScan, children, historicalLabel, onClearHistorical, projectName, scanTime, branch, service }: LayoutProps) {
+export default function Layout({ page, counts, scanning, onScan, onShowScan, children, historicalLabel, onClearHistorical, projectName, scanTime, branch, service }: LayoutProps) {
   const [version, setVersion] = useState('')
   const [, tick] = useState(0)
 
@@ -193,10 +195,15 @@ export default function Layout({ page, counts, scanning, onScan, children, histo
           <span className="hidden md:inline text-xs text-fg-subtle">
             Press <kbd className="kbd">/</kbd> to search
           </span>
-          <button onClick={onScan} disabled={scanning} className="btn-primary min-w-[7.5rem]">
+          <button
+            onClick={scanning ? onShowScan : onScan}
+            disabled={scanning && !onShowScan}
+            className={scanning ? 'btn-secondary min-w-[7.5rem]' : 'btn-primary min-w-[7.5rem]'}
+            title={scanning ? 'Show scan progress' : undefined}
+          >
             {scanning ? (
               <>
-                <LoaderCircle className="w-4 h-4 animate-spin" aria-hidden="true" />
+                <LoaderCircle className="w-4 h-4 animate-spin text-accent" aria-hidden="true" />
                 Scanning…
               </>
             ) : (

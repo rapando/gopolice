@@ -81,6 +81,11 @@ func printProgress(c *cobra.Command) chan scanner.ProgressEvent {
 	progress := make(chan scanner.ProgressEvent, 100)
 	go func() {
 		for event := range progress {
+			if event.IsTick() {
+				// Item-level counts are for the web UI; the terminal gets
+				// the lifecycle messages only.
+				continue
+			}
 			msg := fmt.Sprintf("[%s] %s", event.Scanner, event.Message)
 			if event.Status == scanner.StatusFailed {
 				c.PrintErr("ERROR: ", msg, "\n")

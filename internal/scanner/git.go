@@ -31,20 +31,22 @@ func (s *GitScanner) Run(ctx context.Context, cfg *config.Config, progress chan<
 		projectDir = "."
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Collecting git information"}
+	t := newTracker(progress, s.Name())
+	t.started("Collecting git information")
 
 	if !hasTool("git") {
-		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusSkipped, Message: "git not found"}
+		t.skipped("git not found")
 		return &Result{ScannerName: s.Name(), Duration: time.Since(start)}, nil
 	}
 
 	if !isGitRepo(projectDir) {
-		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusSkipped, Message: "not a git repository"}
+		t.skipped("not a git repository")
 		return &Result{ScannerName: s.Name(), Duration: time.Since(start)}, nil
 	}
 
 	info := &model.GitInfo{}
 
+	t.step(1, 3, "steps", "Reading branch and HEAD", "git rev-parse")
 	if branch, err := gitCommand(projectDir, "rev-parse", "--abbrev-ref", "HEAD"); err == nil {
 		info.Branch = strings.TrimSpace(branch)
 	}
@@ -59,16 +61,18 @@ func (s *GitScanner) Run(ctx context.Context, cfg *config.Config, progress chan<
 		}
 	}
 
+	t.step(2, 3, "steps", "Counting authors", "git shortlog")
 	if authorsOut, err := gitCommand(projectDir, "shortlog", "-sne", "HEAD"); err == nil {
 		info.Authors = parseAuthors(authorsOut)
 		info.AuthorCount = len(info.Authors)
 	}
 
+	t.step(3, 3, "steps", "Reading recent commits", "git log")
 	if commitsOut, err := gitCommand(projectDir, "log", "--max-count=10", "--format=%H|%cI|%an|%ae|%s|%G?"); err == nil {
 		info.Commits = parseCommits(commitsOut)
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Branch: %s, Commit: %.7s", info.Branch, info.Commit), Elapsed: time.Since(start)}
+	t.completedf("Branch: %s, Commit: %.7s", info.Branch, info.Commit)
 	return &Result{
 		ScannerName: s.Name(),
 		Duration:    time.Since(start),

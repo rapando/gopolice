@@ -44,33 +44,36 @@ func (s *DeadCodeScanner) Run(ctx context.Context, cfg *config.Config, progress 
 		projectDir = "."
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Checking for dead code"}
+	t := newTracker(progress, s.Name())
+	t.started("Checking for dead code")
 
 	var allIssues []model.Issue
 
 	if hasTool("staticcheck") {
+		t.step(0, 0, "", "Running staticcheck (U1000: unused code)", "staticcheck -checks U1000 ./...")
 		issues, err := s.runStaticcheck(ctx, projectDir)
 		if err != nil {
-			progress <- ProgressEvent{Scanner: s.Name(), Status: StatusRunning, Message: fmt.Sprintf("staticcheck: %v", err)}
+			t.running(fmt.Sprintf("staticcheck: %v", err))
 		} else {
 			allIssues = append(allIssues, issues...)
 		}
 	} else {
-		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusRunning, Message: "staticcheck not found, trying unused"}
+		t.running("staticcheck not found, trying unused")
 
 		if hasTool("unused") {
+			t.step(0, 0, "", "Running unused", "unused ./...")
 			issues, err := s.runUnused(ctx, projectDir)
 			if err != nil {
-				progress <- ProgressEvent{Scanner: s.Name(), Status: StatusRunning, Message: fmt.Sprintf("unused: %v", err)}
+				t.running(fmt.Sprintf("unused: %v", err))
 			} else {
 				allIssues = append(allIssues, issues...)
 			}
 		} else {
-			progress <- ProgressEvent{Scanner: s.Name(), Status: StatusRunning, Message: "unused not found, skipping dead code detection"}
+			t.running("unused not found, skipping dead code detection")
 		}
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Found %d dead code issues", len(allIssues)), Elapsed: time.Since(start)}
+	t.completedf("Found %d dead code issues", len(allIssues))
 	return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: allIssues}, nil
 }
 
