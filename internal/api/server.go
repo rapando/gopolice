@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,27 +19,52 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rapando/gopolice/internal/cache"
+	"github.com/rapando/gopolice/internal/auth"
 	"github.com/rapando/gopolice/internal/config"
 	"github.com/rapando/gopolice/internal/fixer"
 	"github.com/rapando/gopolice/internal/history"
 	"github.com/rapando/gopolice/internal/model"
-	"github.com/rapando/gopolice/internal/scanner"
+	"github.com/rapando/gopolice/internal/projects"
 	"github.com/rapando/gopolice/internal/watcher"
 )
 
+// Server serves the web UI and API. It runs in one of two modes:
+//
+//   - single-project (gopolice scan / serve): one repository, no login, the
+//     API lives at /api/...;
+//   - service (gopolice service): any number of saved repositories, behind
+//     a login, with project APIs at /api/projects/{id}/....
 type Server struct {
-	store       *Store
-	broadcaster *SSEBroadcaster
-	config      *config.Config
-	projectDir  string
-	mux         *http.ServeMux
-	server      *http.Server
-	listeners   []net.Listener
-	uiFS        fs.FS
-	version     string
-	scanMu      sync.Mutex
-	scanRunning bool
+	cfg     *config.Config
+	mux     *http.ServeMux
+	server  *http.Server
+	uiFS    fs.FS
+	version string
+
+	listeners []net.Listener
+	tlsConfig *tls.Config
+	// allowedHosts are Host header values accepted in addition to loopback
+	// names; set when the service is deliberately exposed on a network.
+	allowedHosts []string
+
+	// def is the project served at the un-prefixed /api/... routes
+	// (single-project mode).
+	def *project
+
+	// Service mode only.
+	auth     *auth.Manager
+	registry *projects.Registry
+	mu       sync.Mutex
+	projects map[string]*project
+}
+
+// ServiceOptions configures service mode.
+type ServiceOptions struct {
+	Auth     *auth.Manager
+	Registry *projects.Registry
+	// AllowedHosts lists extra Host names (without port) the service answers to.
+	AllowedHosts []string
+	TLS          *tls.Config
 }
 
 func NewServer(cfg *config.Config, uiFS fs.FS, version string) *Server {
@@ -49,6 +75,23 @@ func NewServerWithResult(cfg *config.Config, uiFS fs.FS, result *model.ScanResul
 	return newServer(cfg, uiFS, result, version)
 }
 
+// NewService creates a multi-project server that requires login.
+func NewService(cfg *config.Config, uiFS fs.FS, version string, opts ServiceOptions) *Server {
+	s := &Server{
+		cfg:          cfg,
+		mux:          http.NewServeMux(),
+		uiFS:         uiFS,
+		version:      version,
+		auth:         opts.Auth,
+		registry:     opts.Registry,
+		allowedHosts: opts.AllowedHosts,
+		tlsConfig:    opts.TLS,
+		projects:     make(map[string]*project),
+	}
+	s.registerRoutes()
+	return s
+}
+
 func newServer(cfg *config.Config, uiFS fs.FS, result *model.ScanResult, version string) *Server {
 	projectDir := cfg.TargetDir
 	if projectDir == "" {
@@ -56,49 +99,111 @@ func newServer(cfg *config.Config, uiFS fs.FS, result *model.ScanResult, version
 	}
 	absDir, _ := filepath.Abs(projectDir)
 
-	store := NewStore()
+	def := newProject(projects.ID(absDir), filepath.Base(absDir), absDir, cfg)
 	if result != nil {
-		store.Set(result)
+		def.store.Set(result)
 	}
 
 	s := &Server{
-		store:       store,
-		broadcaster: NewSSEBroadcaster(),
-		config:      cfg,
-		projectDir:  absDir,
-		mux:         http.NewServeMux(),
-		uiFS:        uiFS,
-		version:     version,
+		cfg:     cfg,
+		mux:     http.NewServeMux(),
+		uiFS:    uiFS,
+		version: version,
+		def:     def,
 	}
 	s.registerRoutes()
 	return s
 }
 
+// route registers a project-scoped handler at the un-prefixed path (the
+// default project) and under /api/projects/{pid}/.
+func (s *Server) route(pattern string, h func(*project, http.ResponseWriter, *http.Request)) {
+	method, path, _ := strings.Cut(pattern, " ")
+	serve := func(w http.ResponseWriter, r *http.Request) {
+		p := s.projectFor(r)
+		if p == nil {
+			if r.PathValue("pid") != "" {
+				jsonError(w, http.StatusNotFound, "project not found")
+			} else {
+				jsonError(w, http.StatusNotFound, "no project selected")
+			}
+			return
+		}
+		h(p, w, r)
+	}
+	s.mux.HandleFunc(method+" "+path, serve)
+	s.mux.HandleFunc(method+" /api/projects/{pid}"+strings.TrimPrefix(path, "/api"), serve)
+}
+
+// projectFor resolves the project a request addresses.
+func (s *Server) projectFor(r *http.Request) *project {
+	pid := r.PathValue("pid")
+	if pid == "" {
+		return s.def
+	}
+	return s.getProject(pid)
+}
+
+// getProject returns the live state for a saved project, creating it (and
+// loading its cached result) on first use.
+func (s *Server) getProject(id string) *project {
+	if s.registry == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p, ok := s.projects[id]; ok {
+		return p
+	}
+	saved, err := s.registry.Get(id)
+	if err != nil {
+		return nil
+	}
+	p := newProject(saved.ID, saved.Name, saved.Path, s.cfg)
+	p.loadCached()
+	s.projects[id] = p
+	return p
+}
+
+func (s *Server) dropProject(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.projects, id)
+}
+
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /api/version", s.handleVersion)
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
-	s.mux.HandleFunc("POST /api/scan", s.handleScan)
-	s.mux.HandleFunc("GET /api/scan/status", s.handleScanStatus)
-	s.mux.HandleFunc("GET /api/results", s.handleGetResults)
-	s.mux.HandleFunc("GET /api/results/issues", s.handleGetIssue)
-	s.mux.HandleFunc("GET /api/results/tests", s.handleGetTests)
-	s.mux.HandleFunc("GET /api/results/benchmarks", s.handleGetBenchmarks)
-	s.mux.HandleFunc("GET /api/results/profile", s.handleGetProfile)
-	s.mux.HandleFunc("GET /api/results/git", s.handleGetGit)
-	s.mux.HandleFunc("GET /api/results/deps", s.handleGetDeps)
-	s.mux.HandleFunc("GET /api/results/deps/graph", s.handleGetDepGraph)
-	s.mux.HandleFunc("GET /api/config", s.handleGetMergedConfig)
+	s.route("POST /api/scan", (*project).handleScan)
+	s.route("GET /api/scan/status", (*project).handleScanStatus)
+	s.route("GET /api/results", (*project).handleGetResults)
+	s.route("GET /api/results/issues", (*project).handleGetIssue)
+	s.route("GET /api/results/tests", (*project).handleGetTests)
+	s.route("GET /api/results/benchmarks", (*project).handleGetBenchmarks)
+	s.route("GET /api/results/profile", (*project).handleGetProfile)
+	s.route("GET /api/results/git", (*project).handleGetGit)
+	s.route("GET /api/results/deps", (*project).handleGetDeps)
+	s.route("GET /api/results/deps/graph", (*project).handleGetDepGraph)
+	s.route("GET /api/config", (*project).handleGetMergedConfig)
 	s.mux.HandleFunc("GET /api/config/global", s.handleGetGlobalConfig)
 	s.mux.HandleFunc("PUT /api/config/global", s.handleUpdateGlobalConfig)
-	s.mux.HandleFunc("POST /api/fix/batch", s.handleBatchFix)
-	s.mux.HandleFunc("POST /api/fix/{id}", s.handleApplyFix)
-	s.mux.HandleFunc("POST /api/fix/{id}/undo", s.handleUndoFix)
-	s.mux.HandleFunc("GET /api/snippet", s.handleSnippet)
-	s.mux.HandleFunc("GET /api/history", s.handleHistoryList)
-	s.mux.HandleFunc("GET /api/history/trends", s.handleHistoryTrends)
-	s.mux.HandleFunc("GET /api/history/entry/{id}", s.handleHistoryGet)
-	s.mux.HandleFunc("GET /api/history/diff", s.handleHistoryDiff)
-	s.mux.HandleFunc("DELETE /api/history/entry/{id}", s.handleHistoryDelete)
+	s.route("POST /api/fix/batch", (*project).handleBatchFix)
+	s.route("POST /api/fix/{id}", (*project).handleApplyFix)
+	s.route("POST /api/fix/{id}/undo", (*project).handleUndoFix)
+	s.route("GET /api/snippet", (*project).handleSnippet)
+	s.route("GET /api/history", (*project).handleHistoryList)
+	s.route("GET /api/history/trends", (*project).handleHistoryTrends)
+	s.route("GET /api/history/entry/{id}", (*project).handleHistoryGet)
+	s.route("GET /api/history/diff", (*project).handleHistoryDiff)
+	s.route("DELETE /api/history/entry/{id}", (*project).handleHistoryDelete)
+
+	if s.auth != nil {
+		s.registerAuthRoutes()
+	}
+	if s.registry != nil {
+		s.registerProjectRoutes()
+	}
+	s.mux.HandleFunc("GET /api/session", s.handleSession)
 	s.mux.HandleFunc("GET /", s.handleStatic)
 }
 
@@ -106,16 +211,37 @@ func (s *Server) registerRoutes() {
 // successive ports if it is taken. It returns the port actually bound; call
 // Serve afterwards to start handling requests.
 func (s *Server) Listen(port int) (int, error) {
+	return s.ListenHost("", port)
+}
+
+// ListenHost is Listen on a specific host. An empty host means loopback only
+// (both 127.0.0.1 and ::1).
+func (s *Server) ListenHost(host string, port int) (int, error) {
 	if port == 0 {
 		port = config.DefaultPort
 	}
 	maxAttempts := 100
 	for attempt := range maxAttempts {
-		listeners, err := listenLoopback(port + attempt)
+		var listeners []net.Listener
+		var err error
+		if host == "" {
+			listeners, err = listenLoopback(port + attempt)
+		} else {
+			var l net.Listener
+			l, err = net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port+attempt)))
+			if err == nil {
+				listeners = []net.Listener{l}
+			}
+		}
 		if err == nil {
+			if s.tlsConfig != nil {
+				for i, l := range listeners {
+					listeners[i] = tls.NewListener(l, s.tlsConfig)
+				}
+			}
 			s.listeners = listeners
 			s.server = &http.Server{
-				Handler:           localOnlyMiddleware(s.mux),
+				Handler:           s.handler(),
 				ReadHeaderTimeout: 10 * time.Second,
 			}
 			return port + attempt, nil
@@ -125,6 +251,16 @@ func (s *Server) Listen(port int) (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("no available port found after %d attempts", maxAttempts)
+}
+
+// handler wraps the mux with the host/origin guard and, in service mode, the
+// login requirement.
+func (s *Server) handler() http.Handler {
+	h := http.Handler(s.mux)
+	if s.auth != nil {
+		h = s.requireLogin(h)
+	}
+	return hostGuard(s.allowedHosts, h)
 }
 
 // listenLoopback binds port on both 127.0.0.1 and ::1, since "localhost" may
@@ -178,20 +314,29 @@ func isAddrInUse(err error) bool {
 	return false
 }
 
+// Watch re-scans the default project whenever its .go files change
+// (single-project mode).
 func (s *Server) Watch(debounce time.Duration) (*watcher.Watcher, error) {
-	w, err := watcher.New(s.projectDir, debounce, func() {
-		s.TriggerScan(context.Background())
+	if s.def == nil {
+		return nil, errors.New("watch is only available in single-project mode")
+	}
+	p := s.def
+	w, err := watcher.New(p.dir, debounce, func() {
+		p.TriggerScan(context.Background())
 	})
 	if err != nil {
 		return nil, err
 	}
 	w.Start()
-	log.Printf("watching .go files in %s (debounce %v)", s.projectDir, debounce)
+	log.Printf("watching .go files in %s (debounce %v)", p.dir, debounce)
 	return w, nil
 }
 
+// SetResult replaces the default project's result (single-project mode).
 func (s *Server) SetResult(result *model.ScanResult) {
-	s.store.Set(result)
+	if s.def != nil {
+		s.def.store.Set(result)
+	}
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
@@ -201,17 +346,23 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// localOnlyMiddleware restricts the API to the embedded UI. The server can
-// modify source files (fixes) and run commands (scans), so it must not be
-// reachable from other websites the user happens to have open:
-//   - the Host header must be a loopback name, which blocks DNS rebinding;
+// localOnlyMiddleware is hostGuard with no extra allowed hosts.
+func localOnlyMiddleware(next http.Handler) http.Handler {
+	return hostGuard(nil, next)
+}
+
+// hostGuard restricts the API to the embedded UI. The server can modify
+// source files (fixes) and run commands (scans), so it must not be reachable
+// from other websites the user happens to have open:
+//   - the Host header must be a loopback name (or one explicitly allowed),
+//     which blocks DNS rebinding;
 //   - state-changing requests must not come from a different origin, which
 //     blocks cross-site form posts and no-cors fetches.
 //
 // No CORS headers are sent, so browsers keep their same-origin protections.
-func localOnlyMiddleware(next http.Handler) http.Handler {
+func hostGuard(allowed []string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isLoopbackHost(r.Host) {
+		if !isLoopbackHost(r.Host) && !hostAllowed(allowed, r.Host) {
 			jsonError(w, http.StatusForbidden, "forbidden host")
 			return
 		}
@@ -232,12 +383,26 @@ func localOnlyMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func isLoopbackHost(hostport string) bool {
+func hostAllowed(allowed []string, hostport string) bool {
+	host := hostOnly(hostport)
+	for _, a := range allowed {
+		if strings.EqualFold(a, host) {
+			return true
+		}
+	}
+	return false
+}
+
+func hostOnly(hostport string) string {
 	host := hostport
 	if h, _, err := net.SplitHostPort(hostport); err == nil {
 		host = h
 	}
-	host = strings.Trim(host, "[]")
+	return strings.Trim(host, "[]")
+}
+
+func isLoopbackHost(hostport string) bool {
+	host := hostOnly(hostport)
 	if strings.EqualFold(host, "localhost") {
 		return true
 	}
@@ -259,92 +424,23 @@ func jsonError(w http.ResponseWriter, status int, msg string) {
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	// project_dir lets the UI build "open in editor" links from relative paths.
-	jsonResponse(w, http.StatusOK, map[string]string{"version": s.version, "project_dir": s.projectDir})
+	resp := map[string]string{"version": s.version}
+	if s.def != nil {
+		resp["project_dir"] = s.def.dir
+	}
+	jsonResponse(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
-	go s.runScan(context.Background())
+func (p *project) handleScan(w http.ResponseWriter, r *http.Request) {
+	go p.runScan(context.Background())
 	jsonResponse(w, http.StatusAccepted, map[string]string{"status": "scan_started"})
 }
 
-func (s *Server) TriggerScan(ctx context.Context) {
-	s.runScan(ctx)
-}
-
-func (s *Server) runScan(ctx context.Context) {
-	s.scanMu.Lock()
-	if s.scanRunning {
-		s.scanMu.Unlock()
-		log.Println("scan already in progress, skipping")
-		return
-	}
-	s.scanRunning = true
-	s.scanMu.Unlock()
-
-	defer func() {
-		s.scanMu.Lock()
-		s.scanRunning = false
-		s.scanMu.Unlock()
-	}()
-
-	start := time.Now()
-	s.broadcaster.Broadcast(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusStarted, Message: "Starting scan"})
-
-	progress := make(chan scanner.ProgressEvent, 100)
-	done := make(chan *model.ScanResult, 1)
-
-	go func() {
-		result, err := scanner.RunWorkspaceScan(ctx, s.config, progress)
-		if err != nil {
-			s.broadcaster.Broadcast(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusFailed, Message: err.Error()})
-			return
-		}
-		if result == nil {
-			p := scanner.NewDefaultPipeline()
-			result, err = p.Run(ctx, s.config, progress)
-			if err != nil {
-				s.broadcaster.Broadcast(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusFailed, Message: err.Error()})
-				return
-			}
-		}
-		done <- result
-	}()
-
-	for {
-		select {
-		case event := <-progress:
-			s.broadcaster.Broadcast(event)
-		case result := <-done:
-			result.ScanTime = start
-			result.Duration = time.Since(start)
-			s.store.Set(result)
-
-			cachePath := cache.ResultPath(s.projectDir)
-			if err := cache.Save(result, cachePath); err != nil {
-				log.Printf("cache save: %v", err)
-			}
-			if err := history.Save(s.projectDir, result); err != nil {
-				log.Printf("history save: %v", err)
-			}
-
-			s.broadcaster.Broadcast(scanner.ProgressEvent{
-				Scanner: "pipeline",
-				Status:  scanner.StatusCompleted,
-				Message: fmt.Sprintf("Scan complete: %d issues found, took %v", len(result.Issues), result.Duration),
-			})
-			return
-		case <-ctx.Done():
-			s.broadcaster.Broadcast(scanner.ProgressEvent{Scanner: "pipeline", Status: scanner.StatusFailed, Message: "scan canceled"})
-			return
-		}
-	}
-}
-
-func (s *Server) handleScanStatus(w http.ResponseWriter, r *http.Request) {
+func (p *project) handleScanStatus(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		jsonError(w, http.StatusInternalServerError, "streaming not supported")
@@ -355,8 +451,8 @@ func (s *Server) handleScanStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	ch := s.broadcaster.Subscribe()
-	defer s.broadcaster.Unsubscribe(ch)
+	ch := p.broadcaster.Subscribe()
+	defer p.broadcaster.Unsubscribe(ch)
 
 	for {
 		select {
@@ -373,8 +469,8 @@ func (s *Server) handleScanStatus(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleGetResults(w http.ResponseWriter, r *http.Request) {
-	result := s.store.Get()
+func (p *project) handleGetResults(w http.ResponseWriter, r *http.Request) {
+	result := p.store.Get()
 	if result == nil {
 		jsonError(w, http.StatusNotFound, "no scan results available")
 		return
@@ -382,10 +478,10 @@ func (s *Server) handleGetResults(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, result)
 }
 
-func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
+func (p *project) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id != "" {
-		result := s.store.Get()
+		result := p.store.Get()
 		if result == nil {
 			jsonError(w, http.StatusNotFound, "no scan results available")
 			return
@@ -400,7 +496,7 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := s.store.Get()
+	result := p.store.Get()
 	if result == nil {
 		jsonError(w, http.StatusNotFound, "no scan results available")
 		return
@@ -455,8 +551,8 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, issues)
 }
 
-func (s *Server) handleGetTests(w http.ResponseWriter, r *http.Request) {
-	result := s.store.Get()
+func (p *project) handleGetTests(w http.ResponseWriter, r *http.Request) {
+	result := p.store.Get()
 	if result == nil || result.TestResults == nil {
 		jsonError(w, http.StatusNotFound, "no test results available")
 		return
@@ -464,8 +560,8 @@ func (s *Server) handleGetTests(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, result.TestResults)
 }
 
-func (s *Server) handleGetBenchmarks(w http.ResponseWriter, r *http.Request) {
-	result := s.store.Get()
+func (p *project) handleGetBenchmarks(w http.ResponseWriter, r *http.Request) {
+	result := p.store.Get()
 	if result == nil || result.Benchmarks == nil {
 		jsonError(w, http.StatusNotFound, "no benchmark results available")
 		return
@@ -473,8 +569,8 @@ func (s *Server) handleGetBenchmarks(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, result.Benchmarks)
 }
 
-func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
-	result := s.store.Get()
+func (p *project) handleGetProfile(w http.ResponseWriter, r *http.Request) {
+	result := p.store.Get()
 	if result == nil || result.Profile == nil {
 		jsonError(w, http.StatusNotFound, "no profile data available")
 		return
@@ -482,8 +578,8 @@ func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, result.Profile)
 }
 
-func (s *Server) handleGetGit(w http.ResponseWriter, r *http.Request) {
-	result := s.store.Get()
+func (p *project) handleGetGit(w http.ResponseWriter, r *http.Request) {
+	result := p.store.Get()
 	if result == nil || result.GitInfo == nil {
 		jsonError(w, http.StatusNotFound, "no git info available")
 		return
@@ -491,8 +587,8 @@ func (s *Server) handleGetGit(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, result.GitInfo)
 }
 
-func (s *Server) handleGetDeps(w http.ResponseWriter, r *http.Request) {
-	result := s.store.Get()
+func (p *project) handleGetDeps(w http.ResponseWriter, r *http.Request) {
+	result := p.store.Get()
 	if result == nil || result.Deps == nil {
 		jsonError(w, http.StatusNotFound, "no dependency info available")
 		return
@@ -500,8 +596,8 @@ func (s *Server) handleGetDeps(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, result.Deps)
 }
 
-func (s *Server) handleGetDepGraph(w http.ResponseWriter, r *http.Request) {
-	result := s.store.Get()
+func (p *project) handleGetDepGraph(w http.ResponseWriter, r *http.Request) {
+	result := p.store.Get()
 	if result == nil || result.DepGraph == nil {
 		jsonError(w, http.StatusNotFound, "no dependency graph available")
 		return
@@ -509,8 +605,8 @@ func (s *Server) handleGetDepGraph(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, result.DepGraph)
 }
 
-func (s *Server) handleGetMergedConfig(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, http.StatusOK, s.config)
+func (p *project) handleGetMergedConfig(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, p.cfg)
 }
 
 func (s *Server) handleGetGlobalConfig(w http.ResponseWriter, r *http.Request) {
@@ -536,9 +632,9 @@ func (s *Server) handleUpdateGlobalConfig(w http.ResponseWriter, r *http.Request
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
-func (s *Server) handleApplyFix(w http.ResponseWriter, r *http.Request) {
+func (p *project) handleApplyFix(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	result := s.store.Get()
+	result := p.store.Get()
 	if result == nil {
 		jsonError(w, http.StatusNotFound, "no scan results")
 		return
@@ -556,7 +652,7 @@ func (s *Server) handleApplyFix(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fixResult, err := fixer.ApplyFix(issue, s.projectDir)
+	fixResult, err := fixer.ApplyFix(issue, p.dir)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -564,9 +660,9 @@ func (s *Server) handleApplyFix(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, fixResult)
 }
 
-func (s *Server) handleUndoFix(w http.ResponseWriter, r *http.Request) {
+func (p *project) handleUndoFix(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	result := s.store.Get()
+	result := p.store.Get()
 	if result == nil {
 		jsonError(w, http.StatusNotFound, "no scan results")
 		return
@@ -584,7 +680,7 @@ func (s *Server) handleUndoFix(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := fixer.UndoFix(issue, s.projectDir); err != nil {
+	if err := fixer.UndoFix(issue, p.dir); err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -601,14 +697,14 @@ type batchFixResult struct {
 	Message string `json:"message"`
 }
 
-func (s *Server) handleBatchFix(w http.ResponseWriter, r *http.Request) {
+func (p *project) handleBatchFix(w http.ResponseWriter, r *http.Request) {
 	var req batchFixRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	result := s.store.Get()
+	result := p.store.Get()
 	if result == nil {
 		jsonError(w, http.StatusNotFound, "no scan results")
 		return
@@ -626,7 +722,7 @@ func (s *Server) handleBatchFix(w http.ResponseWriter, r *http.Request) {
 			results = append(results, batchFixResult{ID: id, Applied: false, Message: "issue not found"})
 			continue
 		}
-		fixResult, err := fixer.ApplyFix(issue, s.projectDir)
+		fixResult, err := fixer.ApplyFix(issue, p.dir)
 		if err != nil {
 			results = append(results, batchFixResult{ID: id, Applied: false, Message: err.Error()})
 			continue
@@ -637,7 +733,7 @@ func (s *Server) handleBatchFix(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]interface{}{"results": results})
 }
 
-func (s *Server) handleSnippet(w http.ResponseWriter, r *http.Request) {
+func (p *project) handleSnippet(w http.ResponseWriter, r *http.Request) {
 	file := r.URL.Query().Get("file")
 	lineStr := r.URL.Query().Get("line")
 	ctxLines := 10
@@ -667,9 +763,9 @@ func (s *Server) handleSnippet(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, "invalid file path")
 		return
 	}
-	fullPath := filepath.Join(s.projectDir, file)
-	projectRoot := filepath.Clean(s.projectDir) + string(filepath.Separator)
-	if !strings.HasPrefix(fullPath, projectRoot) && fullPath != filepath.Clean(s.projectDir) {
+	fullPath := filepath.Join(p.dir, file)
+	projectRoot := filepath.Clean(p.dir) + string(filepath.Separator)
+	if !strings.HasPrefix(fullPath, projectRoot) && fullPath != filepath.Clean(p.dir) {
 		jsonError(w, http.StatusBadRequest, "invalid file path")
 		return
 	}
@@ -714,8 +810,8 @@ func (s *Server) handleSnippet(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleHistoryList(w http.ResponseWriter, r *http.Request) {
-	entries, err := history.List(s.projectDir)
+func (p *project) handleHistoryList(w http.ResponseWriter, r *http.Request) {
+	entries, err := history.List(p.dir)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -726,8 +822,8 @@ func (s *Server) handleHistoryList(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, entries)
 }
 
-func (s *Server) handleHistoryTrends(w http.ResponseWriter, r *http.Request) {
-	trends, err := history.GetTrends(s.projectDir)
+func (p *project) handleHistoryTrends(w http.ResponseWriter, r *http.Request) {
+	trends, err := history.GetTrends(p.dir)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -738,9 +834,9 @@ func (s *Server) handleHistoryTrends(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, trends)
 }
 
-func (s *Server) handleHistoryGet(w http.ResponseWriter, r *http.Request) {
+func (p *project) handleHistoryGet(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	result, err := history.Load(s.projectDir, id)
+	result, err := history.Load(p.dir, id)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "history entry not found")
 		return
@@ -748,19 +844,19 @@ func (s *Server) handleHistoryGet(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, result)
 }
 
-func (s *Server) handleHistoryDiff(w http.ResponseWriter, r *http.Request) {
+func (p *project) handleHistoryDiff(w http.ResponseWriter, r *http.Request) {
 	fromID := r.URL.Query().Get("from")
 	toID := r.URL.Query().Get("to")
 	if fromID == "" || toID == "" {
 		jsonError(w, http.StatusBadRequest, "from and to query params required")
 		return
 	}
-	from, err := history.Load(s.projectDir, fromID)
+	from, err := history.Load(p.dir, fromID)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "from entry not found")
 		return
 	}
-	to, err := history.Load(s.projectDir, toID)
+	to, err := history.Load(p.dir, toID)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "to entry not found")
 		return
@@ -771,9 +867,9 @@ func (s *Server) handleHistoryDiff(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, diff)
 }
 
-func (s *Server) handleHistoryDelete(w http.ResponseWriter, r *http.Request) {
+func (p *project) handleHistoryDelete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if err := history.Delete(s.projectDir, id); err != nil {
+	if err := history.Delete(p.dir, id); err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

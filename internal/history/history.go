@@ -28,6 +28,9 @@ type Entry struct {
 	ScanResult  *model.ScanResult `json:"-"`
 }
 
+// Grade returns the A–F letter grade for a set of issues.
+func Grade(issues []model.Issue) string { return gradeFromIssues(issues) }
+
 func gradeFromIssues(issues []model.Issue) string {
 	var score int
 	for _, iss := range issues {

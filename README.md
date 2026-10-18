@@ -83,6 +83,46 @@ gopolice version
 
 Open `http://localhost:9393` in your browser after running `gopolice scan` or `gopolice serve`. The web UI lets you browse issues, tests, security findings, benchmarks, profile data, dependency graphs, git history, and trend charts — all from previous scans.
 
+## Running as a service
+
+Instead of running gopolice inside a repository, run it once as a service and
+open repositories from the browser:
+
+```bash
+gopolice service            # http://localhost:9393, loopback only
+gopolice service -p 8080    # choose the port
+```
+
+- **Open repositories** from the UI (folder picker or pasted path). They are
+  saved in `~/.config/gopolice/projects.json` and listed on the next start.
+- **Scan** any saved repository from its card or from its dashboard. Each
+  repository keeps its own latest result and scan history.
+- **Sign in (macOS, default):** with your macOS account password, or with
+  Touch ID. The Touch ID prompt appears on the Mac running the service, so it
+  is only offered when you browse from that machine. Only the user who started
+  the service can sign in, and gopolice stores no credentials.
+- **Sign in (`--auth local`, default off macOS):** gopolice keeps its own
+  username and password, plus optional passkeys (Touch ID, Windows Hello,
+  device PIN) added under *Account*. Accounts live in
+  `~/.config/gopolice/auth.json` (mode 0600).
+
+By default the service only listens on loopback. To reach it from other
+machines:
+
+```bash
+gopolice service --host 0.0.0.0 --allowed-host gopolice.example.com \
+  --tls-cert cert.pem --tls-key key.pem
+```
+
+`--allowed-host` is the name clients use (it is checked against the `Host`
+header), and passkeys only work over HTTPS or on `localhost`. When exposed,
+first-run account creation requires a setup token printed in the terminal.
+
+Because a scan runs `go vet`, `go test` and benchmarks in the repository, only
+open repositories you trust, and keep the service behind its login.
+
+`gopolice scan` and `gopolice serve` are unchanged: one repository, no login.
+
 ## Configuration
 
 Config is stored at `~/.config/gopolice/config.yaml`:

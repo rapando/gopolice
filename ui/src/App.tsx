@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useCallback, useState, useEffect, useMemo } from 'react'
 import Dashboard from './pages/Dashboard'
 import Issues from './pages/Issues'
 import IssueDetail from './pages/IssueDetail'
@@ -14,10 +14,73 @@ import ConfigPage from './pages/Config'
 import History from './pages/History'
 import Layout, { type NavCounts } from './components/Layout'
 import Spinner from './components/Spinner'
-import { getResults, subscribeStatus, type ProgressEvent, type ScanResult, triggerScan } from './api/client'
-import { navigate, useRoute } from './lib/router'
+import Login from './pages/Login'
+import Projects from './pages/Projects'
+import Account from './pages/Account'
+import ServiceShell from './components/ServiceShell'
+import {
+  getResults, getSession, logout, openProject, setCurrentProject, subscribeStatus, triggerScan,
+  UNAUTHORIZED_EVENT, type ProgressEvent, type ScanResult, type SessionInfo,
+} from './api/client'
+import { setProjectDir } from './lib/editor'
+import { navigate, setRouteProject, useRoute } from './lib/router'
 
 export default function App() {
+  const route = useRoute()
+  const [session, setSession] = useState<SessionInfo | null>(null)
+  const [unreachable, setUnreachable] = useState(false)
+
+  const refreshSession = useCallback(() => {
+    getSession().then((s) => { setSession(s); setUnreachable(false) }).catch(() => setUnreachable(true))
+  }, [])
+
+  useEffect(() => {
+    refreshSession()
+    // Any API call that comes back 401 means the login lapsed.
+    window.addEventListener(UNAUTHORIZED_EVENT, refreshSession)
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, refreshSession)
+  }, [refreshSession])
+
+  const signOut = useCallback(async () => {
+    try { await logout() } catch { /* the session check below is authoritative */ }
+    window.location.hash = ''
+    refreshSession()
+  }, [refreshSession])
+
+  if (unreachable && !session) {
+    return (
+      <div className="min-h-screen bg-canvas text-fg flex items-center justify-center p-6 text-center">
+        <p className="text-sm text-fg-muted">Can't reach the gopolice server. Is it still running?</p>
+      </div>
+    )
+  }
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-canvas flex items-center justify-center"><Spinner /></div>
+    )
+  }
+  if (!session.authenticated) {
+    return <Login session={session} onAuthenticated={setSession} />
+  }
+
+  if (session.mode === 'single') {
+    setCurrentProject(null)
+    setRouteProject(undefined)
+    return <ProjectApp />
+  }
+
+  // Service mode: every repository lives under #/p/{id}/...
+  setCurrentProject(route.project ?? null)
+  setRouteProject(route.project)
+  const shell = (page: typeof route.page, body: JSX.Element) => (
+    <ServiceShell page={page} username={session.username} onLogout={signOut}>{body}</ServiceShell>
+  )
+  if (route.page === 'account') return shell('account', <Account osUsername={session.os_mode ? session.os_username : undefined} />)
+  if (!route.project || route.page === 'projects') return shell('projects', <Projects osMode={!!session.os_mode} />)
+  return <ProjectApp key={route.project} projectId={route.project} service={{ username: session.username, onLogout: signOut }} />
+}
+
+function ProjectApp({ projectId, service }: { projectId?: string; service?: { username?: string; onLogout: () => void } }) {
   const route = useRoute()
   const [result, setResult] = useState<ScanResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -25,6 +88,15 @@ export default function App() {
   const [readingResults, setReadingResults] = useState(false)
   const [scanEvents, setScanEvents] = useState<ProgressEvent[]>([])
   const [historicalLabel, setHistoricalLabel] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!projectId) return
+    // Records the open, and tells us where the repository lives so
+    // open-in-editor links can be built.
+    openProject(projectId)
+      .then((p) => setProjectDir(p.path))
+      .catch(() => navigate({ page: 'projects' }))
+  }, [projectId])
 
   useEffect(() => {
     getResults()
@@ -101,6 +173,7 @@ export default function App() {
       projectName={result?.project_name}
       scanTime={result?.scan_time}
       branch={result?.git_info?.branch}
+      service={service}
     >
       {loading ? (
         <div className="flex items-center justify-center h-64">
