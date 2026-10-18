@@ -141,6 +141,36 @@ func TestLaunchdInstallUninstall(t *testing.T) {
 	}
 }
 
+func TestLaunchdRestartKickstartsInPlace(t *testing.T) {
+	home := t.TempDir()
+	fr := &fakeRunner{}
+	l := &launchd{home: home, uid: 501, run: fr.run}
+	if err := l.Restart(); err == nil || !strings.Contains(err.Error(), "not installed") {
+		t.Fatalf("expected not-installed error, got %v", err)
+	}
+	if err := writeUnit(l.UnitPath(), renderPlist(testSpec)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Loaded job: a single kickstart -k, never a bootout.
+	if err := l.Restart(); err != nil {
+		t.Fatalf("restart: %v", err)
+	}
+	if !fr.called("launchctl kickstart -k gui/501/"+Label) || fr.called("launchctl bootout") {
+		t.Errorf("unexpected calls: %v", fr.calls)
+	}
+
+	// Nothing loaded: kickstart fails, so it is bootstrapped.
+	fr.calls = nil
+	fr.reply("launchctl kickstart", "Could not find service", errors.New("exit 113"))
+	if err := l.Restart(); err != nil {
+		t.Fatalf("restart when unloaded: %v", err)
+	}
+	if !fr.called("launchctl bootstrap gui/501 " + l.UnitPath()) {
+		t.Errorf("bootstrap not called: %v", fr.calls)
+	}
+}
+
 func TestLaunchdInstallBootstrapFails(t *testing.T) {
 	fr := &fakeRunner{}
 	fr.reply("launchctl bootstrap", "Bootstrap failed: 5: Input/output error", errors.New("exit 5"))

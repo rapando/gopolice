@@ -67,8 +67,14 @@ func (l *launchd) Stop() error {
 }
 
 func (l *launchd) Restart() error {
-	if err := l.Stop(); err != nil {
-		return err
+	if !fileExists(l.UnitPath()) {
+		return fmt.Errorf("%s is not installed (run: gopolice service install)", Label)
+	}
+	// kickstart -k restarts a loaded job in place. Stop followed by Start
+	// does not work here: bootout unloads asynchronously, so an immediate
+	// bootstrap races it and can leave nothing running.
+	if _, err := l.run("launchctl", "kickstart", "-k", l.target()); err == nil {
+		return nil
 	}
 	return l.Start()
 }
