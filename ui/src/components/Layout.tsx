@@ -1,6 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react'
 import {
-  FlaskConical, Gauge, GitBranch, Ghost, History, LayoutDashboard, LoaderCircle, Network,
+  ArrowLeft, FlaskConical, Gauge, GitBranch, Ghost, History, LayoutDashboard, LoaderCircle, LogOut, Network,
   Play, Settings, ShieldAlert, ShieldCheck, TriangleAlert, type LucideIcon,
 } from 'lucide-react'
 import { getVersion } from '../api/client'
@@ -27,6 +27,8 @@ interface LayoutProps {
   projectName?: string
   scanTime?: string
   branch?: string
+  /** Present in service mode: links back to the repository list and signs out. */
+  service?: { username?: string; onLogout: () => void }
 }
 
 interface NavItem {
@@ -77,7 +79,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`
 }
 
-export default function Layout({ page, counts, scanning, onScan, children, historicalLabel, onClearHistorical, projectName, scanTime, branch }: LayoutProps) {
+export default function Layout({ page, counts, scanning, onScan, children, historicalLabel, onClearHistorical, projectName, scanTime, branch, service }: LayoutProps) {
   const [version, setVersion] = useState('')
   const [, tick] = useState(0)
 
@@ -118,6 +120,16 @@ export default function Layout({ page, counts, scanning, onScan, children, histo
           <span className="font-mono font-semibold text-[15px] tracking-tight">gopolice</span>
         </div>
 
+        {service && (
+          <a
+            href="#/projects"
+            className="px-4 py-2.5 border-b border-line flex items-center gap-2 text-sm text-fg-muted hover:bg-subtle hover:text-fg transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+            All repositories
+          </a>
+        )}
+
         {projectName && (
           <div className="px-4 py-3 border-b border-line">
             <p className="font-mono text-sm font-medium truncate" title={projectName}>{projectName}</p>
@@ -152,6 +164,21 @@ export default function Layout({ page, counts, scanning, onScan, children, histo
           <ul>
             <NavLink item={allItems[allItems.length - 1]} active={page === 'config'} counts={counts} />
           </ul>
+          {service && (
+            <div className="mt-1 flex items-center gap-1">
+              <a
+                href="#/account"
+                className="flex-1 min-w-0 truncate px-2 py-1.5 rounded-md text-sm text-fg-muted hover:bg-subtle hover:text-fg"
+                title="Account"
+              >
+                {service.username ?? 'Account'}
+              </a>
+              <button onClick={service.onLogout} className="btn-ghost p-1.5" title="Sign out">
+                <LogOut className="w-4 h-4" aria-hidden="true" />
+                <span className="sr-only">Sign out</span>
+              </button>
+            </div>
+          )}
           <div className="mt-2 px-2 flex items-center justify-between">
             <span className="text-xs text-fg-subtle font-mono truncate">{version}</span>
             <ThemeToggle />

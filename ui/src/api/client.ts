@@ -165,14 +165,50 @@ export interface Snippet {
   lines: SnippetLine[]
 }
 
+// In service mode every repository has its own API under
+// /api/projects/{id}/..., so the per-repository calls below are written
+// against /api/... and rewritten here for the selected repository.
+let currentProject: string | null = null
+
+export function setCurrentProject(id: string | null) {
+  currentProject = id
+}
+
+const UNSCOPED = ['/api/auth', '/api/projects', '/api/fs', '/api/session', '/api/health', '/api/version', '/api/config/global']
+
+function scoped(path: string, project: string | null = currentProject): string {
+  if (!project || !path.startsWith('/api/') || UNSCOPED.some((p) => path.startsWith(p))) return path
+  return `/api/projects/${encodeURIComponent(project)}${path.slice('/api'.length)}`
+}
+
+export class ApiError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+/** Fired when the server says the session is no longer valid. */
+export const UNAUTHORIZED_EVENT = 'gopolice:unauthorized'
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${BASE}${scoped(path)}`, {
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
     ...options,
   })
   if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`HTTP ${res.status}: ${body}`)
+    const text = await res.text()
+    let message = `HTTP ${res.status}: ${text}`
+    try {
+      const body = JSON.parse(text)
+      if (typeof body?.error === 'string') message = body.error
+    } catch {
+      // not JSON; keep the raw text
+    }
+    if (res.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+    throw new ApiError(res.status, message)
   }
   return res.json()
 }
@@ -279,6 +315,145 @@ export function triggerScan(): Promise<{ status: string }> {
   return request('/api/scan', { method: 'POST' })
 }
 
+/** Starts a scan of a specific saved repository, whichever one is selected. */
+export function triggerScanFor(projectId: string): Promise<{ status: string }> {
+  return request(`/api/projects/${encodeURIComponent(projectId)}/scan`, { method: 'POST' })
+}
+
+// ---- Session & accounts (service mode) ----
+
+export interface SessionInfo {
+  /** "service": login + many repositories. "single": one repository, no login. */
+  mode: 'service' | 'single'
+  auth_required: boolean
+  authenticated: boolean
+  setup_required: boolean
+  setup_token_required?: boolean
+  username?: string
+  version: string
+  /** The operating system verifies logins (macOS password / Touch ID). */
+  os_mode?: boolean
+  os_username?: string
+  /** Touch ID can be offered: this browser is on the machine running the service. */
+  touch_id?: boolean
+}
+
+export function getSession(): Promise<SessionInfo> {
+  return request('/api/session')
+}
+
+export function setupAccount(username: string, password: string, setupToken?: string): Promise<SessionInfo> {
+  return request('/api/auth/setup', {
+    method: 'POST',
+    body: JSON.stringify({ username, password, setup_token: setupToken ?? '' }),
+  })
+}
+
+export function loginWithPassword(username: string, password: string): Promise<SessionInfo> {
+  return request('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) })
+}
+
+export function loginWithTouchId(): Promise<SessionInfo> {
+  return request('/api/auth/os/biometric', { method: 'POST' })
+}
+
+export function logout(): Promise<{ status: string }> {
+  return request('/api/auth/logout', { method: 'POST' })
+}
+
+export function changePassword(current: string, next: string): Promise<{ status: string }> {
+  return request('/api/auth/password', { method: 'POST', body: JSON.stringify({ current, new: next }) })
+}
+
+export interface Passkey {
+  id: string
+  name: string
+  added_at: string
+  last_used_at?: string
+}
+
+export function listPasskeys(): Promise<Passkey[]> {
+  return request('/api/auth/passkeys')
+}
+
+export function deletePasskey(id: string): Promise<Passkey[]> {
+  return request(`/api/auth/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+/** Raw JSON bodies for the two-step WebAuthn ceremonies. */
+export function passkeyBegin(kind: 'login' | 'register'): Promise<{ ceremony: string; options: any }> {
+  return request(`/api/auth/passkey/${kind}/begin`, { method: 'POST' })
+}
+
+export function passkeyFinishLogin(ceremony: string, credential: unknown): Promise<SessionInfo> {
+  return request(`/api/auth/passkey/login/finish?ceremony=${encodeURIComponent(ceremony)}`, {
+    method: 'POST',
+    body: JSON.stringify(credential),
+  })
+}
+
+export function passkeyFinishRegister(ceremony: string, name: string, credential: unknown): Promise<Passkey[]> {
+  return request(
+    `/api/auth/passkey/register/finish?ceremony=${encodeURIComponent(ceremony)}&name=${encodeURIComponent(name)}`,
+    { method: 'POST', body: JSON.stringify(credential) },
+  )
+}
+
+// ---- Saved repositories (service mode) ----
+
+export interface ProjectView {
+  id: string
+  name: string
+  path: string
+  added_at: string
+  opened_at?: string
+  missing?: boolean
+  scanning: boolean
+  has_result: boolean
+  issues: number
+  errors: number
+  grade?: string
+  scan_time?: string
+  branch?: string
+}
+
+export function listProjects(): Promise<ProjectView[]> {
+  return request('/api/projects')
+}
+
+export function addProject(path: string): Promise<ProjectView> {
+  return request('/api/projects', { method: 'POST', body: JSON.stringify({ path }) })
+}
+
+export function openProject(id: string): Promise<ProjectView> {
+  return request(`/api/projects/${encodeURIComponent(id)}/open`, { method: 'POST' })
+}
+
+export function removeProject(id: string): Promise<{ status: string }> {
+  return request(`/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export interface BrowseEntry {
+  name: string
+  path: string
+  go_project: boolean
+}
+
+export interface BrowseResult {
+  path: string
+  parent: string
+  go_project: boolean
+  entries: BrowseEntry[]
+}
+
+export function browse(path?: string, hidden = false): Promise<BrowseResult> {
+  const q = new URLSearchParams()
+  if (path) q.set('path', path)
+  if (hidden) q.set('hidden', '1')
+  const qs = q.toString()
+  return request(`/api/fs/browse${qs ? `?${qs}` : ''}`)
+}
+
 export function getConfig(): Promise<any> {
   return request('/api/config')
 }
@@ -314,7 +489,7 @@ export function getSnippet(file: string, line: number): Promise<Snippet> {
 }
 
 export function subscribeStatus(onEvent: (e: ProgressEvent) => void): () => void {
-  const es = new EventSource('/api/scan/status')
+  const es = new EventSource(scoped('/api/scan/status'))
   es.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data)
