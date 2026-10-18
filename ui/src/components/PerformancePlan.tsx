@@ -252,13 +252,24 @@ ${sortedAllocs[0].allocs_per_op > 10 ? `**${sortedAllocs[0].name}** has the high
 
 ---
 
-## Instructions for AI Agent
+## Instructions for Claude Opus
 
-Please implement the high-priority optimizations first:
-1. For each benchmark function, locate the corresponding source code
-2. Apply the specific recommendation listed above
-3. Verify improvements by running: \`go test -bench=. -benchmem -count=1 ./...\`
-4. Run \`go vet ./...\` after making changes
+You are Claude Opus, working as a careful maintainer of \`${projectName}\`. Use this plan to make the code faster **without changing what it does**.
+
+### Ground rules
+
+1. **Preserve behaviour exactly.** An optimisation must return the same results, produce the same side effects and errors, and keep the same exported API. Buffer reuse, pre-sized slices, avoiding repeated allocations in a loop, hoisting invariant work, and caching a pure computation within one call are in scope.
+2. **Ask before any change to functionality or design.** Stop and get the user's explicit confirmation before: replacing an algorithm or data structure, changing a signature or exported API, adding or changing concurrency (goroutines, locks, channels), introducing caches that outlive a call or share state, changing precision, ordering, or limits, or adding a dependency. Present the item, why the behaviour-preserving options are insufficient, the smallest change you propose, and what could be affected. Continue with the other items while you wait.
+3. **No hidden changes.** Do not alter or delete tests or benchmarks to make numbers look better, and do not change benchmark parameters.
+4. **Keep changes minimal and local**, in the existing style. Do not commit or push unless asked.
+
+### How to work
+
+1. Triage every item above into **A** (behaviour-preserving, do now), **B** (needs confirmation), **C** (skip, with reason). Show the table and ask the **B** questions in one batch before editing.
+2. Record a baseline first: \`go test -run=^$ -bench=. -benchmem -count=5 ./... > before.txt\`.
+3. Apply the **A** items in priority order, one benchmark at a time, re-reading the code before each edit.
+4. Verify with real checks: \`go build ./...\`, \`go vet ./...\`, \`go test ./...\`, then \`go test -run=^$ -bench=. -benchmem -count=5 ./... > after.txt\` and compare (\`benchstat before.txt after.txt\` if available). Revert any change that does not measurably help.
+5. Report a table of item → *done* (with before/after numbers) / *awaiting confirmation* / *skipped*, the commands you ran, and an explicit statement that behaviour is unchanged.
 `
   return totalMD
 }
@@ -320,17 +331,17 @@ function renderMarkdown(md: string): string {
     }
 
     if (line.startsWith('### ')) {
-      html += `<h3>${escapeHtml(line.slice(4))}</h3>\n`
+      html += `<h3 class="text-sm font-semibold mt-4 mb-1">${escapeHtml(line.slice(4))}</h3>\n`
       continue
     }
 
     if (line.startsWith('## ')) {
-      html += `<h2>${escapeHtml(line.slice(3))}</h2>\n`
+      html += `<h2 class="text-base font-semibold mt-5 mb-1">${escapeHtml(line.slice(3))}</h2>\n`
       continue
     }
 
     if (line.startsWith('# ')) {
-      html += `<h1>${escapeHtml(line.slice(2))}</h1>\n`
+      html += `<h1 class="text-lg font-semibold mt-2 mb-1">${escapeHtml(line.slice(2))}</h1>\n`
       continue
     }
 
@@ -340,7 +351,7 @@ function renderMarkdown(md: string): string {
     }
 
     if (line.startsWith('- ')) {
-      html += `<li>${escapeHtml(line.slice(2))}</li>\n`
+      html += `<li class="ml-5 list-disc">${escapeHtml(line.slice(2))}</li>\n`
       continue
     }
 
@@ -386,6 +397,7 @@ export default function PerformancePlan({ benchmarks, profile, projectName, onCl
         <div className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-line">
           <h2 className="text-base font-semibold text-fg">
             Performance Improvement Plan
+            <span className="ml-2 text-xs font-normal text-fg-muted">written for Claude Opus · optimisations must not change behaviour</span>
           </h2>
           <div className="flex items-center gap-2">
             <button

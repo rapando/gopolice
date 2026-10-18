@@ -1,19 +1,21 @@
 import { useMemo, type ReactNode } from 'react'
 import { ArrowRight, CircleCheck, CircleX, GitBranch, ShieldAlert, ShieldCheck } from 'lucide-react'
-import { ScanResult, computeGrade, ProgressEvent } from '../api/client'
+import { ScanResult, computeGrade } from '../api/client'
 import { useThemeColors } from '../hooks/useThemeColors'
 import { SeverityIcon } from '../components/Severity'
 import Trends from '../components/Trends'
 import ScanProgress from '../components/ScanProgress'
 import EmptyState from '../components/EmptyState'
 import { routeToHash, type Page } from '../lib/router'
+import type { ScanState } from '../lib/scan'
 
 interface Props {
   result: ScanResult | null
-  scanEvents: ProgressEvent[]
+  scan: ScanState
   scanning: boolean
   readingResults: boolean
   onScan: () => void
+  onShowScan?: () => void
 }
 
 function fmtCount(n: number): string {
@@ -89,7 +91,7 @@ function Card({ to, title, children, className = '' }: { to?: Page; title: strin
   )
 }
 
-export default function Dashboard({ result, scanEvents, scanning, readingResults, onScan }: Props) {
+export default function Dashboard({ result, scan, scanning, readingResults, onScan, onShowScan }: Props) {
   const colors = useThemeColors()
   const showProgress = scanning || readingResults
 
@@ -103,7 +105,7 @@ export default function Dashboard({ result, scanEvents, scanning, readingResults
     return (
       <div className="max-w-7xl mx-auto p-8">
         {showProgress ? (
-          <ScanProgress events={scanEvents} readingResults={readingResults} />
+          <ScanProgress state={scan} readingResults={readingResults} onDetails={onShowScan} />
         ) : (
           <EmptyState message="No scan results yet" hint="Run a scan to analyze this project." onScan={onScan} scanning={scanning} />
         )}
@@ -133,7 +135,7 @@ export default function Dashboard({ result, scanEvents, scanning, readingResults
 
   return (
     <div className="max-w-7xl mx-auto p-8 space-y-6">
-      {showProgress && <ScanProgress events={scanEvents} readingResults={readingResults} />}
+      {showProgress && <ScanProgress state={scan} readingResults={readingResults} onDetails={onShowScan} />}
 
       <p className="text-sm text-fg-muted">
         <span className="tabular-nums">{result.go_files}</span> Go files · <span className="tabular-nums">{fmtCount(result.total_lines)}</span> lines ·

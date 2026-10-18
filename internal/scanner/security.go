@@ -43,32 +43,37 @@ func (s *SecurityScanner) Run(ctx context.Context, cfg *config.Config, progress 
 		projectDir = "."
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Running security checks"}
+	t := newTracker(progress, s.Name())
+	t.started("Running security checks")
 	var allIssues []model.Issue
 
 	if hasTool("gosec") {
+		t.step(1, 2, "tools", "Running gosec (static analysis)", "gosec ./...")
 		issues, err := s.runGosec(ctx, projectDir)
 		if err != nil {
-			progress <- ProgressEvent{Scanner: s.Name(), Status: StatusRunning, Message: fmt.Sprintf("gosec: %v", err)}
+			t.running(fmt.Sprintf("gosec: %v", err))
 		} else {
 			allIssues = append(allIssues, issues...)
+			t.running(fmt.Sprintf("gosec found %d issues", len(issues)))
 		}
 	} else {
-		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusRunning, Message: "gosec not found, skipping"}
+		t.running("gosec not found, skipping")
 	}
 
 	if hasTool("govulncheck") {
+		t.step(2, 2, "tools", "Running govulncheck (known vulnerabilities)", "govulncheck ./...")
 		issues, err := s.runGovulncheck(ctx, projectDir)
 		if err != nil {
-			progress <- ProgressEvent{Scanner: s.Name(), Status: StatusRunning, Message: fmt.Sprintf("govulncheck: %v", err)}
+			t.running(fmt.Sprintf("govulncheck: %v", err))
 		} else {
 			allIssues = append(allIssues, issues...)
+			t.running(fmt.Sprintf("govulncheck found %d vulnerabilities", len(issues)))
 		}
 	} else {
-		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusRunning, Message: "govulncheck not found, skipping"}
+		t.running("govulncheck not found, skipping")
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Found %d security issues", len(allIssues)), Elapsed: time.Since(start)}
+	t.completedf("Found %d security issues", len(allIssues))
 	return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: allIssues}, nil
 }
 

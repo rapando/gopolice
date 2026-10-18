@@ -30,9 +30,12 @@ func (s *FileStatsScanner) Run(ctx context.Context, cfg *config.Config, progress
 		projectDir = "."
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Gathering file statistics"}
+	t := newTracker(progress, s.Name())
+	t.started("Gathering file statistics")
 
 	skipDir := NewGitIgnoreFilter(projectDir)
+	expected := len(goFiles(projectDir, true))
+	t.step(0, expected, "files", fmt.Sprintf("Counting lines in %d Go files", expected), "")
 
 	var fileStats []model.FileStat
 	totalFiles := 0
@@ -76,17 +79,18 @@ func (s *FileStatsScanner) Run(ctx context.Context, cfg *config.Config, progress
 		stat.Path = relPath
 		fileStats = append(fileStats, stat)
 		totalLines += stat.Lines
+		t.tick(goFiles, expected, "files", relPath, goFiles == expected)
 
 		return nil
 	})
 	if err != nil {
-		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusFailed, Message: fmt.Sprintf("file stats failed: %v", err), Error: err}
+		t.failed(fmt.Sprintf("file stats failed: %v", err), err)
 		return &Result{ScannerName: s.Name(), Duration: time.Since(start), Error: err}, nil
 	}
 
 	deps := parseGoMod(filepath.Join(projectDir, "go.mod"))
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Found %d .go files, %d total lines", goFiles, totalLines), Elapsed: time.Since(start)}
+	t.completedf("Found %d .go files, %d total lines", goFiles, totalLines)
 	return &Result{
 		ScannerName: s.Name(),
 		Duration:    time.Since(start),

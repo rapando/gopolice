@@ -3,7 +3,6 @@ package scanner
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"os/exec"
 	"strings"
 	"time"
@@ -29,7 +28,9 @@ func (s *DepGraphScanner) Run(ctx context.Context, cfg *config.Config, progress 
 		projectDir = "."
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Building dependency graph"}
+	t := newTracker(progress, s.Name())
+	t.started("Building dependency graph")
+	t.step(0, 0, "", "Resolving module graph", "go mod graph")
 
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -39,15 +40,15 @@ func (s *DepGraphScanner) Run(ctx context.Context, cfg *config.Config, progress 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if len(output) == 0 {
-			progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: "No go.mod found", Elapsed: time.Since(start)}
+			t.completed("No go.mod found")
 			return &Result{ScannerName: s.Name(), Duration: time.Since(start)}, nil
 		}
-		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("go mod graph failed: %v", err), Elapsed: time.Since(start)}
+		t.completedf("go mod graph failed: %v", err)
 		return &Result{ScannerName: s.Name(), Duration: time.Since(start)}, nil
 	}
 
 	graph := parseModGraph(string(output))
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Found %d dependency edges", len(graph.Edges)), Elapsed: time.Since(start)}
+	t.completedf("Found %d dependency edges", len(graph.Edges))
 	return &Result{
 		ScannerName: s.Name(),
 		Duration:    time.Since(start),

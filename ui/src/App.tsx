@@ -13,6 +13,7 @@ import GitStats from './pages/GitStats'
 import ConfigPage from './pages/Config'
 import History from './pages/History'
 import Layout, { type NavCounts } from './components/Layout'
+import ScanModal from './components/ScanModal'
 import Spinner from './components/Spinner'
 import Login from './pages/Login'
 import Projects from './pages/Projects'
@@ -24,6 +25,7 @@ import {
 } from './api/client'
 import { setProjectDir } from './lib/editor'
 import { navigate, setRouteProject, useRoute } from './lib/router'
+import { applyEvent, emptyScanState, startingScanState } from './lib/scan'
 
 export default function App() {
   const route = useRoute()
@@ -86,7 +88,8 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
   const [readingResults, setReadingResults] = useState(false)
-  const [scanEvents, setScanEvents] = useState<ProgressEvent[]>([])
+  const [scan, setScan] = useState(emptyScanState)
+  const [scanOpen, setScanOpen] = useState(false)
   const [historicalLabel, setHistoricalLabel] = useState<string | null>(null)
 
   useEffect(() => {
@@ -106,7 +109,12 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
 
   useEffect(() => {
     const unsub = subscribeStatus((e: ProgressEvent) => {
-      setScanEvents((prev) => [...prev, e])
+      setScan((prev) => applyEvent(prev, e))
+      if (e.status === 'started' && e.scanner === 'pipeline') {
+        // A scan began (from here, another tab, the repository list or the
+        // file watcher): show its progress.
+        setScanOpen(true)
+      }
       if (e.status === 'completed' && e.scanner === 'pipeline') {
         setScanning(true)
         setReadingResults(true)
@@ -139,10 +147,12 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
   }, [result])
 
   const handleScan = () => {
-    setScanEvents([])
+    setScan(startingScanState())
     setScanning(true)
+    setScanOpen(true)
     triggerScan().catch(() => {})
   }
+  const closeScan = useCallback(() => setScanOpen(false), [])
 
   const handleLoadResult = (r: ScanResult, label: string) => {
     setResult(r)
@@ -168,6 +178,7 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
       counts={counts}
       scanning={scanning}
       onScan={handleScan}
+      onShowScan={() => setScanOpen(true)}
       historicalLabel={historicalLabel}
       onClearHistorical={handleClearHistorical}
       projectName={result?.project_name}
@@ -175,12 +186,21 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
       branch={result?.git_info?.branch}
       service={service}
     >
+      {scanOpen && (
+        <ScanModal
+          state={scan}
+          projectName={result?.project_name}
+          readingResults={readingResults}
+          onClose={closeScan}
+          onViewResults={() => { setScanOpen(false); navigate({ page: 'dashboard' }) }}
+        />
+      )}
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <Spinner />
         </div>
       ) : page === 'dashboard' ? (
-        <Dashboard result={result} scanEvents={scanEvents} scanning={scanning} readingResults={readingResults} onScan={handleScan} />
+        <Dashboard result={result} scan={scan} scanning={scanning} readingResults={readingResults} onScan={handleScan} onShowScan={() => setScanOpen(true)} />
       ) : page === 'issues' ? (
         <Issues issues={result?.issues ?? []} onSelectIssue={goIssue} onSelectFile={goFile} projectName={result?.project_name} />
       ) : page === 'issue' && param ? (

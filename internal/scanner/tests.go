@@ -42,17 +42,23 @@ func (s *TestScanner) Run(ctx context.Context, cfg *config.Config, progress chan
 		projectDir = "."
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Running tests"}
+	t := newTracker(progress, s.Name())
+	t.started("Running tests")
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	testResult := s.runTests(ctx, projectDir)
+	inv := inventoryTests(projectDir)
+	if inv.Tests > 0 {
+		t.step(0, inv.Tests, "tests", fmt.Sprintf("Found %d tests in %d packages", inv.Tests, inv.Packages), "")
+	}
+
+	testResult := s.runTests(ctx, projectDir, t, inv)
 
 	s.locateTestFileLocations(projectDir, testResult)
 	issues := s.issuesFromTestResult(testResult)
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Ran %d tests, %d passed, %d failed", testResult.Total.Total, testResult.Total.Passed, testResult.Total.Failed), Elapsed: time.Since(start)}
+	t.completedf("Ran %d tests, %d passed, %d failed", testResult.Total.Total, testResult.Total.Passed, testResult.Total.Failed)
 	return &Result{
 		ScannerName: s.Name(),
 		Duration:    time.Since(start),
@@ -61,16 +67,53 @@ func (s *TestScanner) Run(ctx context.Context, cfg *config.Config, progress chan
 	}, nil
 }
 
-func (s *TestScanner) runTests(ctx context.Context, projectDir string) *model.TestResult {
+var (
+	testRunLineRe  = regexp.MustCompile(`^=== RUN\s+(\S+)`)
+	testDoneLineRe = regexp.MustCompile(`^--- (PASS|FAIL|SKIP):\s+(\S+)`)
+)
+
+func (s *TestScanner) runTests(ctx context.Context, projectDir string, t *tracker, inv testInventory) *model.TestResult {
 	// -cover adds "coverage: N%" to each package summary line, so results and
 	// coverage come from a single run.
 	cmd := exec.CommandContext(ctx, "go", "test", "-v", "-cover", "-count=1", "./...")
 	cmd.Dir = projectDir
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		if len(output) == 0 {
-			return &model.TestResult{Packages: []model.TestPackage{}}
+
+	// Top-level tests only (subtests contain a slash): their count is what
+	// the inventory predicted, and -v prints their result as each finishes.
+	done, failed := 0, 0
+	total := inv.Tests
+	output, err := streamOutput(cmd, func(line string) {
+		if m := testRunLineRe.FindStringSubmatch(line); m != nil {
+			if !strings.Contains(m[1], "/") {
+				t.tick(done, total, "tests", m[1], false)
+			}
+			return
 		}
+		if m := testDoneLineRe.FindStringSubmatch(line); m != nil {
+			if strings.Contains(m[2], "/") {
+				return
+			}
+			done++
+			if m[1] == "FAIL" {
+				failed++
+			}
+			if done > total {
+				total = done
+			}
+			detail := m[2]
+			if failed > 0 {
+				detail = fmt.Sprintf("%s (%d failed)", m[2], failed)
+			}
+			t.tick(done, total, "tests", detail, done == total)
+			return
+		}
+		if m := testPkgRe.FindStringSubmatch(line); m != nil && m[1] == "FAIL" {
+			// A package that failed to build or test: say so while the rest runs.
+			t.tick(done, total, "tests", "FAIL "+m[2], true)
+		}
+	})
+	if err != nil && len(output) == 0 {
+		return &model.TestResult{Packages: []model.TestPackage{}}
 	}
 
 	return parseTestOutput(string(output))

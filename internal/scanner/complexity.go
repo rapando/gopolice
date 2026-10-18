@@ -6,9 +6,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/rapando/gopolice/internal/config"
@@ -36,42 +34,36 @@ func (s *ComplexityScanner) Run(ctx context.Context, cfg *config.Config, progres
 		projectDir = "."
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Analyzing code complexity"}
+	t := newTracker(progress, s.Name())
+	t.started("Analyzing code complexity")
 
-	skipDir := NewGitIgnoreFilter(projectDir)
 	threshold := s.Threshold
+	files := goFiles(projectDir, false)
+	t.step(0, len(files), "files", fmt.Sprintf("Parsing %d Go files", len(files)), "")
 
 	var allIssues []model.Issue
+	var err error
 
-	err := filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.IsDir() {
-			if skipDir(path) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(info.Name(), ".go") || strings.HasSuffix(info.Name(), "_test.go") {
-			return nil
-		}
-
+	for i, path := range files {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			err = ctx.Err()
 		default:
 		}
-
-		fset := token.NewFileSet()
-		f, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 		if err != nil {
-			return nil
+			break
 		}
 
-		relPath, err := filepath.Rel(projectDir, path)
-		if err != nil {
+		relPath, relErr := filepath.Rel(projectDir, path)
+		if relErr != nil {
 			relPath = path
+		}
+		t.tick(i+1, len(files), "files", relPath, i+1 == len(files))
+
+		fset := token.NewFileSet()
+		f, parseErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if parseErr != nil {
+			continue
 		}
 
 		for _, decl := range f.Decls {
@@ -96,14 +88,13 @@ func (s *ComplexityScanner) Run(ctx context.Context, cfg *config.Config, progres
 				})
 			}
 		}
-		return nil
-	})
+	}
 	if err != nil {
-		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusFailed, Message: fmt.Sprintf("complexity analysis failed: %v", err), Error: err}
+		t.failed(fmt.Sprintf("complexity analysis failed: %v", err), err)
 		return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: allIssues, Error: err}, nil
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Found %d complex functions", len(allIssues)), Elapsed: time.Since(start)}
+	t.completedf("Found %d complex functions", len(allIssues))
 	return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: allIssues}, nil
 }
 

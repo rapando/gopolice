@@ -47,14 +47,15 @@ func (s *LintScanner) Run(ctx context.Context, cfg *config.Config, progress chan
 		projectDir = "."
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusStarted, Message: "Running lint checks"}
+	t := newTracker(progress, s.Name())
+	t.started("Running lint checks")
 
 	if hasTool("golangci-lint") {
-		return s.runGolangciLint(ctx, projectDir, progress)
+		return s.runGolangciLint(ctx, projectDir, t)
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusRunning, Message: "golangci-lint not found, falling back to go vet"}
-	return s.runGoVet(ctx, projectDir, progress, start)
+	t.running("golangci-lint not found, falling back to go vet")
+	return s.runGoVet(ctx, projectDir, t, start)
 }
 
 func golangciLintArgs() []string {
@@ -69,10 +70,13 @@ func golangciLintArgs() []string {
 	return []string{"run", "--out-format=json", "--issues-exit-code=0", "./..."}
 }
 
-func (s *LintScanner) runGolangciLint(ctx context.Context, projectDir string, progress chan<- ProgressEvent) (*Result, error) {
+func (s *LintScanner) runGolangciLint(ctx context.Context, projectDir string, t *tracker) (*Result, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+
+	// golangci-lint only reports at the end, so show what it is looking at.
+	t.step(0, 0, "", fmt.Sprintf("Running golangci-lint on %d files", len(goFiles(projectDir, true))), "golangci-lint run ./...")
 
 	cmd := exec.CommandContext(ctx, "golangci-lint", golangciLintArgs()...)
 	cmd.Dir = projectDir
@@ -81,13 +85,13 @@ func (s *LintScanner) runGolangciLint(ctx context.Context, projectDir string, pr
 	var parsed golangciLintOutput
 	parseErr := json.Unmarshal(output, &parsed)
 	if parseErr != nil {
-		progress <- ProgressEvent{Scanner: s.Name(), Status: StatusFailed, Message: fmt.Sprintf("golangci-lint failed: %v", err), Error: err}
+		t.failed(fmt.Sprintf("golangci-lint failed: %v", err), err)
 		return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: nil, Error: err}, nil
 	}
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			progress <- ProgressEvent{Scanner: s.Name(), Status: StatusRunning, Message: fmt.Sprintf("golangci-lint exited with code %d, partial results", exitErr.ExitCode())}
+			t.running(fmt.Sprintf("golangci-lint exited with code %d, partial results", exitErr.ExitCode()))
 		}
 	}
 
@@ -111,26 +115,33 @@ func (s *LintScanner) runGolangciLint(ctx context.Context, projectDir string, pr
 		})
 	}
 
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Found %d issues", len(issues)), Elapsed: time.Since(start)}
+	t.completedf("Found %d issues", len(issues))
 	return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: issues}, nil
 }
 
-func (s *LintScanner) runGoVet(ctx context.Context, projectDir string, progress chan<- ProgressEvent, start time.Time) (*Result, error) {
+func (s *LintScanner) runGoVet(ctx context.Context, projectDir string, t *tracker, start time.Time) (*Result, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "go", "vet", "./...")
 	cmd.Dir = projectDir
-	output, err := cmd.CombinedOutput()
+	// go vet names each package ("# pkg") as it gets to it.
+	pkgs := 0
+	output, err := streamOutput(cmd, func(line string) {
+		if strings.HasPrefix(line, "# ") {
+			pkgs++
+			t.tick(pkgs, 0, "packages", strings.TrimPrefix(line, "# "), false)
+		}
+	})
 	if err != nil {
 		if len(output) == 0 {
-			progress <- ProgressEvent{Scanner: s.Name(), Status: StatusFailed, Message: fmt.Sprintf("go vet failed: %v", err), Error: err}
+			t.failed(fmt.Sprintf("go vet failed: %v", err), err)
 			return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: nil, Error: err}, nil
 		}
 	}
 
 	issues := parseVetOutput(string(output))
-	progress <- ProgressEvent{Scanner: s.Name(), Status: StatusCompleted, Message: fmt.Sprintf("Found %d issues (go vet)", len(issues)), Elapsed: time.Since(start)}
+	t.completedf("Found %d issues (go vet)", len(issues))
 	return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: issues}, nil
 }
 

@@ -139,7 +139,7 @@ func RunWorkspaceScan(ctx context.Context, cfg *config.Config, progress chan<- P
 
 		modName := moduleNames[i]
 		if progress != nil {
-			progress <- ProgressEvent{Scanner: "workspace", Status: StatusRunning, Message: fmt.Sprintf("Scanning module: %s", modName)}
+			progress <- ProgressEvent{Scanner: "workspace", Status: StatusRunning, Message: fmt.Sprintf("Scanning module %d of %d: %s", i+1, len(moduleDirs), modName), Done: i, Total: len(moduleDirs), Unit: "modules", Detail: modName}
 		}
 
 		p := NewDefaultPipeline()
