@@ -123,6 +123,36 @@ open repositories you trust, and keep the service behind its login.
 
 `gopolice scan` and `gopolice serve` are unchanged: one repository, no login.
 
+### Running in the background
+
+`gopolice service` runs in the foreground. To have the operating system start
+it at login and keep it running, install it as a background service:
+
+```bash
+gopolice service install                 # same flags as `gopolice service`
+gopolice service install -p 8080 --host 0.0.0.0 --allowed-host gopolice.example.com \
+  --tls-cert cert.pem --tls-key key.pem
+
+gopolice service status                  # installed? running? where are the logs?
+gopolice service stop                    # until next login or `start`
+gopolice service start
+gopolice service restart
+gopolice service uninstall               # keeps ~/.config/gopolice
+```
+
+- **macOS:** a LaunchAgent at `~/Library/LaunchAgents/com.rapando.gopolice.plist`.
+  It runs in your login session, so Touch ID sign-in keeps working. Output goes
+  to `~/.config/gopolice/service.log`.
+- **Linux:** a systemd user unit at `~/.config/systemd/user/gopolice.service`
+  (`systemctl --user`, no root needed). Logs are in
+  `journalctl --user -u gopolice`. Run `loginctl enable-linger $USER` if the
+  service should keep running while you are logged out.
+
+The unit stores the path of the `gopolice` binary you ran `install` with and
+your current `PATH`, so scans can find `go`, `golangci-lint` and the other
+tools. After upgrading gopolice, run `gopolice service restart` (or `install`
+again if the binary moved).
+
 ## Configuration
 
 Config is stored at `~/.config/gopolice/config.yaml`:
