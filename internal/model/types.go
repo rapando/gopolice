@@ -35,6 +35,11 @@ type Issue struct {
 	Solution string     `json:"solution,omitempty"`
 	Module   string     `json:"module,omitempty"`
 	GitBlame *BlameInfo `json:"git_blame,omitempty"`
+	// Value is the measured number behind the issue (cyclomatic complexity),
+	// and Threshold the limit it exceeded, so the UI can sort and chart it
+	// instead of parsing the message.
+	Value     int `json:"value,omitempty"`
+	Threshold int `json:"threshold,omitempty"`
 }
 
 type BlameInfo struct {

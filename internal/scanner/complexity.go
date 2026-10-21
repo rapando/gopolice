@@ -76,15 +76,17 @@ func (s *ComplexityScanner) Run(ctx context.Context, cfg *config.Config, progres
 			if comp > threshold {
 				pos := fset.Position(funcDecl.Pos())
 				allIssues = append(allIssues, model.Issue{
-					ID:       fmt.Sprintf("complexity-%s-%s", relPath, funcDecl.Name.Name),
-					Scanner:  "complexity",
-					Rule:     "high-complexity",
-					Severity: model.SeverityWarning,
-					File:     relPath,
-					Line:     pos.Line,
-					Message:  fmt.Sprintf("Function %s has cyclomatic complexity of %d (threshold: %d)", funcDecl.Name.Name, comp, threshold),
-					Category: model.CategoryComplexity,
-					Solution: "Consider extracting logic into smaller helper functions, using early returns to reduce nesting, or simplifying conditional branches to bring the complexity below the threshold.",
+					ID:        fmt.Sprintf("complexity-%s-%s", relPath, funcDecl.Name.Name),
+					Scanner:   "complexity",
+					Rule:      "high-complexity",
+					Severity:  model.SeverityWarning,
+					File:      relPath,
+					Line:      pos.Line,
+					Message:   fmt.Sprintf("Function %s has cyclomatic complexity of %d (threshold: %d)", funcDecl.Name.Name, comp, threshold),
+					Category:  model.CategoryComplexity,
+					Value:     comp,
+					Threshold: threshold,
+					Solution:  "Consider extracting logic into smaller helper functions, using early returns to reduce nesting, or simplifying conditional branches to bring the complexity below the threshold.",
 				})
 			}
 		}
