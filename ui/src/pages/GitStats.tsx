@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { GitInfo } from '../api/client'
 import EmptyState from '../components/EmptyState'
+import StatTile from '../components/StatTile'
 
 interface Props {
   gitInfo: GitInfo | null
@@ -27,7 +28,7 @@ export default function GitStats({ gitInfo, onScan, scanning }: Props) {
 
   if (!gitInfo) {
     return (
-      <div className="max-w-6xl mx-auto p-8">
+      <div className="page">
         <EmptyState message="No git info available." onScan={onScan} scanning={scanning} />
       </div>
     )
@@ -43,24 +44,18 @@ export default function GitStats({ gitInfo, onScan, scanning }: Props) {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-8">
+    <div className="page">
       <div className="grid grid-cols-3 gap-4 mb-5">
-        <div className="card px-5 py-4">
-          <p className="text-xs text-fg-muted uppercase tracking-wide font-medium mb-0.5">Branch</p>
-          <p className="text-base font-semibold font-mono">{gitInfo.branch}</p>
-        </div>
-        <div className="card px-5 py-4">
-          <p className="text-xs text-fg-muted uppercase tracking-wide font-medium mb-0.5">Commit</p>
-          <p className="text-base font-semibold font-mono text-xs">{gitInfo.commit.slice(0, 7)}</p>
-        </div>
+        <StatTile label="Branch" value={<span className="font-mono">{gitInfo.branch}</span>} dense />
+        <StatTile label="Commit" value={<span className="font-mono">{gitInfo.commit.slice(0, 7)}</span>} dense />
         <button
           onClick={() => setShowAuthors(!showAuthors)}
           aria-expanded={showAuthors}
           aria-label="Toggle authors list"
           className="card px-5 py-4 text-left cursor-pointer hover:shadow-md transition-shadow"
         >
-          <p className="text-xs text-fg-muted uppercase tracking-wide font-medium mb-0.5">Authors</p>
-          <p className="text-base font-semibold">
+          <p className="text-sm text-fg-muted mb-0.5">Authors</p>
+          <p className="text-2xl font-semibold tabular-nums">
             {gitInfo.author_count}
             <span className="ml-1 text-xs font-normal text-fg-subtle">{showAuthors ? '▲' : '▼'}</span>
           </p>
@@ -88,7 +83,7 @@ export default function GitStats({ gitInfo, onScan, scanning }: Props) {
       {gitInfo.commits && gitInfo.commits.length > 0 && (
         <div className="card">
           <div className="px-5 py-3 border-b border-line">
-            <p className="text-xs text-fg-muted uppercase tracking-wide font-medium">Last {gitInfo.commits.length} Commits</p>
+            <p className="text-sm font-medium text-fg-muted">Last {gitInfo.commits.length} commits</p>
           </div>
           <div className="divide-y divide-line">
             {gitInfo.commits.map((c, i) => (

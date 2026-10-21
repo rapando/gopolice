@@ -23,7 +23,7 @@ export default function TestDetail({ testResult, issues, pkgName, testName, onBa
 
   if (!test || !pkg) {
     return (
-      <div className="max-w-4xl mx-auto p-8">
+      <div className="page">
         <BackLink onClick={onBack} />
         <div className="card p-8 text-center text-fg-muted">This test is not in the current results.</div>
       </div>
@@ -31,7 +31,7 @@ export default function TestDetail({ testResult, issues, pkgName, testName, onBa
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-8">
+    <div className="page">
       <BackLink onClick={onBack} />
 
       <section className="card overflow-hidden mb-6">

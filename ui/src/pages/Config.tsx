@@ -58,7 +58,7 @@ export default function ConfigPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-8 space-y-6">
+    <div className="page"><div className="page-narrow space-y-6">
       <Section title="Appearance" desc="Stored in this browser.">
         <Row label="Theme" desc="System follows your OS setting.">
           <ThemeToggle />
@@ -134,7 +134,7 @@ export default function ConfigPage() {
           </>
         )}
       </Section>
-    </div>
+    </div></div>
   )
 }
 

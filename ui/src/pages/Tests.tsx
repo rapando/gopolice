@@ -15,7 +15,7 @@ interface Props {
 
 export default function Tests({ testResult, onScan, scanning, onSelectTest }: Props) {
   return (
-    <div className="max-w-6xl mx-auto p-8">
+    <div className="page">
       {!testResult ? (
         <EmptyState message="No test results available." onScan={onScan} scanning={scanning} />
       ) : (

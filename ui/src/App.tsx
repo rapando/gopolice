@@ -183,6 +183,7 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
       onClearHistorical={handleClearHistorical}
       projectName={result?.project_name}
       scanTime={result?.scan_time}
+      scanDuration={result?.duration}
       branch={result?.git_info?.branch}
       service={service}
     >

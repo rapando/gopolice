@@ -299,7 +299,7 @@ export default function DepGraph({ depGraph, onScan, scanning }: Props) {
 
   if (!depGraph || !edges.length) {
     return (
-      <div className="max-w-6xl mx-auto p-8">
+      <div className="page">
         <EmptyState message="No dependency graph available." onScan={onScan} scanning={scanning} />
       </div>
     )

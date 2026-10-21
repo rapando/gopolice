@@ -28,6 +28,8 @@ interface LayoutProps {
   onClearHistorical?: () => void
   projectName?: string
   scanTime?: string
+  /** Nanoseconds, from the scan result. */
+  scanDuration?: number
   branch?: string
   /** Present in service mode: links back to the repository list and signs out. */
   service?: { username?: string; onLogout: () => void }
@@ -81,9 +83,22 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`
 }
 
-export default function Layout({ page, counts, scanning, onScan, onShowScan, children, historicalLabel, onClearHistorical, projectName, scanTime, branch, service }: LayoutProps) {
+function fmtScanDuration(ns: number): string {
+  const s = Math.round(ns / 1e9)
+  if (s < 60) return `${s}s`
+  return `${Math.floor(s / 60)}m ${(s % 60).toString().padStart(2, '0')}s`
+}
+
+export default function Layout({ page, counts, scanning, onScan, onShowScan, children, historicalLabel, onClearHistorical, projectName, scanTime, scanDuration, branch, service }: LayoutProps) {
   const [version, setVersion] = useState('')
   const [, tick] = useState(0)
+  const [hasSearch, setHasSearch] = useState(false)
+
+  // The "/" hint only makes sense on pages that render a search box.
+  useEffect(() => {
+    const present = !!document.querySelector('main input[type="search"]')
+    if (present !== hasSearch) setHasSearch(present)
+  })
 
   useEffect(() => {
     getVersion().then((r) => {
@@ -133,19 +148,22 @@ export default function Layout({ page, counts, scanning, onScan, onShowScan, chi
         )}
 
         {projectName && (
-          <div className="px-4 py-3 border-b border-line">
-            <p className="font-mono text-sm font-medium truncate" title={projectName}>{projectName}</p>
-            <div className="mt-1 flex items-center gap-2 text-xs text-fg-muted">
-              {branch && (
-                <span className="inline-flex items-center gap-1 min-w-0">
-                  <GitBranch className="w-3 h-3 shrink-0" aria-hidden="true" />
-                  <span className="font-mono truncate">{branch}</span>
-                </span>
-              )}
-              {scanTime && (
-                <span className="shrink-0" title={new Date(scanTime).toLocaleString()}>· {timeAgo(scanTime)}</span>
-              )}
-            </div>
+          <div className="px-4 py-3 border-b border-line min-w-0">
+            <p className="text-[15px] font-semibold truncate" title={projectName}>{projectName.split('/').pop() || projectName}</p>
+            {projectName.includes('/') && (
+              <p className="font-mono text-[11px] text-fg-subtle truncate" title={projectName}>{projectName}</p>
+            )}
+            {branch && (
+              <p className="mt-1 inline-flex items-center gap-1 min-w-0 max-w-full text-xs text-fg-muted">
+                <GitBranch className="w-3 h-3 shrink-0" aria-hidden="true" />
+                <span className="font-mono truncate" title={branch}>{branch}</span>
+              </p>
+            )}
+            {scanTime && (
+              <p className="text-xs text-fg-subtle" title={new Date(scanTime).toLocaleString()}>
+                Scanned {timeAgo(scanTime)}{scanDuration ? ` · ${fmtScanDuration(scanDuration)}` : ''}
+              </p>
+            )}
           </div>
         )}
 
@@ -182,7 +200,7 @@ export default function Layout({ page, counts, scanning, onScan, onShowScan, chi
             </div>
           )}
           <div className="mt-2 px-2 flex items-center justify-between">
-            <span className="text-xs text-fg-subtle font-mono truncate">{version}</span>
+            <span className="text-xs text-fg-subtle font-mono truncate" title={version}>{version.replace(/-0\.\d{14}-[0-9a-f]+/, '-dev')}</span>
             <ThemeToggle />
           </div>
         </div>
@@ -192,9 +210,11 @@ export default function Layout({ page, counts, scanning, onScan, onShowScan, chi
         <header className="h-14 shrink-0 bg-surface border-b border-line flex items-center gap-3 px-6">
           <h1 className="text-base font-semibold truncate">{current?.label ?? ''}</h1>
           <div className="flex-1" />
-          <span className="hidden md:inline text-xs text-fg-subtle">
-            Press <kbd className="kbd">/</kbd> to search
-          </span>
+          {hasSearch && (
+            <span className="hidden md:inline text-xs text-fg-subtle">
+              Press <kbd className="kbd">/</kbd> to search
+            </span>
+          )}
           <button
             onClick={scanning ? onShowScan : onScan}
             disabled={scanning && !onShowScan}

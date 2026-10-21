@@ -13,7 +13,7 @@ export default function Security({ issues, onSelectIssue }: Props) {
   const securityIssues = issues.filter((i) => i.category === 'security')
 
   return (
-    <div className="max-w-6xl mx-auto p-8">
+    <div className="page">
       <p className="text-sm text-fg-muted mb-4">
         Findings from <code className="font-mono">gosec</code> and <code className="font-mono">govulncheck</code>, when installed.
       </p>

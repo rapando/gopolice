@@ -5,6 +5,7 @@ import { BenchmarkResult, ProfileData, ProfileEntry } from '../api/client'
 import PerformancePlan from '../components/PerformancePlan'
 import { useThemeColors, seriesColorMap } from '../hooks/useThemeColors'
 import EmptyState from '../components/EmptyState'
+import StatTile, { type StatTone } from '../components/StatTile'
 
 // Chart fills come from the fixed categorical series order; label text on a
 // fill picks near-black or white, whichever contrasts more with that fill.
@@ -173,13 +174,8 @@ function ChartCard({ title, caption, children }: { title: string; caption?: stri
 }
 
 function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
-  return (
-    <div className="bg-surface border border-line rounded-lg px-4 py-3">
-      <div className="text-xs text-fg-muted uppercase tracking-wide mb-0.5">{label}</div>
-      <div className={`text-xl font-bold tabular-nums ${accent || 'text-fg'}`}>{value}</div>
-      {sub && <div className="text-xs text-fg-subtle mt-0.5 truncate">{sub}</div>}
-    </div>
-  )
+  const tone: StatTone = accent === 'text-danger' ? 'danger' : accent === 'text-warning' ? 'warning' : accent === 'text-orange' ? 'orange' : accent === 'text-success' ? 'success' : 'default'
+  return <StatTile label={label} value={value} sub={sub} tone={tone} />
 }
 
 function useTooltip<T>() {
@@ -677,14 +673,14 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
 
   if (!hasBenchmarks && !hasProfile) {
     return (
-      <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1600px)' }}>
+      <div className="page">
         <EmptyState message="No performance data available. Run a scan with benchmarks and profiling enabled." onScan={onScan} scanning={scanning} />
       </div>
     )
   }
 
   return (
-    <div className="mx-auto p-8" style={{ maxWidth: 'min(95vw, 1600px)' }}>
+    <div className="page">
       <div className="flex items-center justify-between gap-4 mb-6">
         <p className="text-sm text-fg-muted">Benchmarks from <code className="font-mono">go test -bench</code> and CPU/memory profiles of those benchmarks.</p>
         <button onClick={() => setShowPlan(true)} className="btn-secondary shrink-0">
@@ -699,7 +695,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
           {stats && (
             <>
               <StatCard label="Benchmarks" value={String(stats.n)} sub={`${stats.zeroAlloc} alloc-free`} />
-              <StatCard label="Avg Time/Op" value={fmtShortNS(stats.avgTime)} />
+              <StatCard label="Avg time/op" value={fmtShortNS(stats.avgTime)} />
               <StatCard
                 label="Slowest"
                 value={fmtShortNS(stats.slowest.time_per_op)}

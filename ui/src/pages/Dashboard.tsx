@@ -103,7 +103,7 @@ export default function Dashboard({ result, scan, scanning, readingResults, onSc
 
   if (!result) {
     return (
-      <div className="max-w-7xl mx-auto p-8">
+      <div className="page">
         {showProgress ? (
           <ScanProgress state={scan} readingResults={readingResults} onDetails={onShowScan} />
         ) : (
@@ -134,7 +134,7 @@ export default function Dashboard({ result, scan, scanning, readingResults, onSc
   const maxScanner = issueByScanner[0]?.[1] ?? 1
 
   return (
-    <div className="max-w-7xl mx-auto p-8 space-y-6">
+    <div className="page space-y-6">
       {showProgress && <ScanProgress state={scan} readingResults={readingResults} onDetails={onShowScan} />}
 
       <p className="text-sm text-fg-muted">
