@@ -1,11 +1,12 @@
 import { useState, useMemo, Fragment } from 'react'
-import { ChevronDown, ChevronRight, Download, LoaderCircle, Search, Wrench, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, LoaderCircle, Search, Wrench, X } from 'lucide-react'
 import { getSnippet, batchFix, Issue, Snippet } from '../api/client'
 import FixPlan from '../components/FixPlan'
 import FileLink from '../components/FileLink'
 import CodeSnippet from '../components/CodeSnippet'
 import { SeverityBadge, SeverityIcon } from '../components/Severity'
 import { severities, severityBadgeClass } from '../lib/severity'
+import { compareBySeverityThenValue, issueMeasure } from '../lib/issues'
 
 interface Props {
   issues: Issue[]
@@ -34,7 +35,22 @@ function groupKey(issue: Issue, by: GroupBy): string {
   return ''
 }
 
-const COLS = 4
+type SortKey = 'severity' | 'value' | 'file' | 'rule'
+
+const SEV_RANK: Record<string, number> = { error: 0, warning: 1, info: 2 }
+
+function compareBy(key: SortKey, dir: 1 | -1) {
+  return (a: Issue, b: Issue): number => {
+    let r = 0
+    switch (key) {
+      case 'severity': r = compareBySeverityThenValue(a, b); break
+      case 'value': r = (issueMeasure(b)?.value ?? -1) - (issueMeasure(a)?.value ?? -1) || (SEV_RANK[a.severity] ?? 3) - (SEV_RANK[b.severity] ?? 3); break
+      case 'file': r = a.file.localeCompare(b.file) || a.line - b.line; break
+      case 'rule': r = (a.rule || a.scanner).localeCompare(b.rule || b.scanner) || compareBySeverityThenValue(a, b); break
+    }
+    return r * dir
+  }
+}
 
 export default function Issues({ issues, onSelectIssue, onSelectFile, projectName }: Props) {
   const [selectedSeverity, setSelectedSeverity] = useState('')
@@ -45,8 +61,15 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
   const [batchMsg, setBatchMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [applying, setApplying] = useState(false)
   const [showExport, setShowExport] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('severity')
+  const [sortDir, setSortDir] = useState<1 | -1>(1)
 
   const hasModules = issues.some((i) => i.module)
+
+  const setSort = (key: SortKey) => {
+    if (key === sortKey) setSortDir((d) => (d === 1 ? -1 : 1))
+    else { setSortKey(key); setSortDir(1) }
+  }
 
   const severityCounts = useMemo(() => {
     const m: Record<string, number> = {}
@@ -60,8 +83,16 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
       if (selectedSeverity && i.severity !== selectedSeverity) return false
       if (q && ![i.message, i.file, i.rule, i.scanner].some((f) => f?.toLowerCase().includes(q))) return false
       return true
-    })
-  }, [issues, selectedSeverity, search])
+    }).sort(compareBy(sortKey, sortDir))
+  }, [issues, selectedSeverity, search, sortKey, sortDir])
+
+  // The severity column only earns its space when it varies.
+  const showSeverity = useMemo(() => new Set(filtered.map((i) => i.severity)).size > 1, [filtered])
+  // A measured value (complexity) gets its own sortable column with a bar.
+  const measured = useMemo(() => filtered.filter((i) => issueMeasure(i)), [filtered])
+  const showValue = measured.length > 0
+  const maxValue = useMemo(() => Math.max(1, ...measured.map((i) => issueMeasure(i)!.value)), [measured])
+  const cols = 3 + (showSeverity ? 1 : 0) + (showValue ? 1 : 0)
 
   const toggleSnippet = async (issue: Issue) => {
     if (expanded?.id === issue.id) {
@@ -119,6 +150,10 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
 
   const rowProps = (issue: Issue) => ({
     issue,
+    showSeverity,
+    showValue,
+    maxValue,
+    cols,
     selected: selected.has(issue.id),
     expanded: expanded?.id === issue.id ? expanded : null,
     onToggleSelect: () => toggleSelect(issue.id),
@@ -128,7 +163,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
   })
 
   return (
-    <div className="max-w-7xl mx-auto p-8">
+    <div className="page">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="relative w-80">
@@ -146,12 +181,14 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
         <div className="flex gap-1.5" role="group" aria-label="Filter by severity">
           {severities.map((s) => {
             const active = selectedSeverity === s
+            const none = (severityCounts[s] ?? 0) === 0
             return (
               <button
                 key={s}
                 onClick={() => setSelectedSeverity(active ? '' : s)}
                 aria-pressed={active}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-sm rounded-md border transition-colors ${ active ?`${severityBadgeClass(s)} border-current` : 'border-line text-fg-muted hover:bg-subtle hover:text-fg'
+                disabled={none}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-sm rounded-md border transition-colors disabled:opacity-40 disabled:cursor-default ${ active ?`${severityBadgeClass(s)} border-current` : 'border-line text-fg-muted hover:bg-subtle hover:text-fg'
                 }`}
               >
                 <SeverityIcon severity={s} className="w-3.5 h-3.5" />
@@ -214,16 +251,17 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
           )}
         </div>
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="card overflow-x-auto">
+          <table className="w-full min-w-[52rem] text-sm">
             <thead>
               <tr className="border-b border-line bg-subtle">
                 <th className="th w-10">
                   <input type="checkbox" checked={allVisibleSelected} onChange={() => toggleMany(filtered.map((i) => i.id))} aria-label="Select all visible issues" className="w-4 h-4" />
                 </th>
-                <th className="th w-28">Severity</th>
-                <th className="th">Issue</th>
-                <th className="th w-[32%]">Location</th>
+                {showSeverity && <SortHeader label="Severity" k="severity" sortKey={sortKey} sortDir={sortDir} onSort={setSort} className="w-28" />}
+                <SortHeader label="Issue" k="rule" sortKey={sortKey} sortDir={sortDir} onSort={setSort} />
+                {showValue && <SortHeader label="Value" k="value" sortKey={sortKey} sortDir={sortDir} onSort={setSort} className="w-40" title="The measured number behind the issue, against its threshold" />}
+                <SortHeader label="Location" k="file" sortKey={sortKey} sortDir={sortDir} onSort={setSort} className="w-[30%]" />
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -240,7 +278,7 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
                             className="w-4 h-4"
                           />
                         </td>
-                        <td colSpan={COLS - 1} className="px-4 py-2 text-sm">
+                        <td colSpan={cols - 1} className="px-4 py-2 text-sm">
                           <span className={`font-medium ${groupBy === 'file' || groupBy === 'rule' ? 'font-mono text-[13px]' : 'capitalize'}`}>{key}</span>
                           <span className="ml-2 text-fg-muted tabular-nums">{groupIssues.length}</span>
                         </td>
@@ -271,8 +309,25 @@ function groupIssues(issues: Issue[], by: GroupBy): Map<string, Issue[]> {
   return new Map([...groups.entries()].sort((a, b) => b[1].length - a[1].length))
 }
 
+function SortHeader({ label, k, sortKey, sortDir, onSort, className = '', title }: { label: string; k: SortKey; sortKey: SortKey; sortDir: 1 | -1; onSort: (k: SortKey) => void; className?: string; title?: string }) {
+  const active = sortKey === k
+  const Arrow = sortDir === 1 ? ArrowDown : ArrowUp
+  return (
+    <th className={`th ${className}`} aria-sort={active ? (sortDir === 1 ? 'descending' : 'ascending') : 'none'} title={title}>
+      <button onClick={() => onSort(k)} className={`inline-flex items-center gap-1 hover:text-fg ${active ? 'text-fg' : ''}`}>
+        {label}
+        <Arrow className={`w-3 h-3 ${active ? '' : 'opacity-0'}`} aria-hidden="true" />
+      </button>
+    </th>
+  )
+}
+
 interface IssueRowProps {
   issue: Issue
+  showSeverity: boolean
+  showValue: boolean
+  maxValue: number
+  cols: number
   selected: boolean
   expanded: { data: Snippet | null; error?: string } | null
   onToggleSelect: () => void
@@ -281,26 +336,41 @@ interface IssueRowProps {
   onOpenFile: () => void
 }
 
-function IssueRow({ issue, selected, expanded, onToggleSelect, onSelectIssue, onToggleSnippet, onOpenFile }: IssueRowProps) {
+function IssueRow({ issue, showSeverity, showValue, maxValue, cols, selected, expanded, onToggleSelect, onSelectIssue, onToggleSnippet, onOpenFile }: IssueRowProps) {
   const Chevron = expanded ? ChevronDown : ChevronRight
+  const measure = issueMeasure(issue)
+  const cell = 'px-4 py-2.5 align-middle'
   return (
     <>
-      <tr className={selected ? 'bg-accent-soft/50' : 'hover:bg-subtle/60'}>
-        <td className="td">
-          <input type="checkbox" checked={selected} onChange={onToggleSelect} aria-label="Select issue" className="w-4 h-4 mt-0.5" />
+      <tr className={`h-11 ${selected ? 'bg-accent-soft/50' : 'hover:bg-subtle/60'}`}>
+        <td className={cell}>
+          <input type="checkbox" checked={selected} onChange={onToggleSelect} aria-label="Select issue" className="w-4 h-4 block" />
         </td>
-        <td className="td"><SeverityBadge severity={issue.severity} /></td>
-        <td className="td">
-          <button onClick={onSelectIssue} className="text-left text-fg hover:text-accent hover:underline">
-            {issue.message}
-          </button>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-fg-muted">
-            {issue.rule && <span className="font-mono">{issue.rule}</span>}
-            <span>{issue.scanner}</span>
-            {issue.module && <span className="px-1.5 rounded bg-violet-soft text-violet font-mono">{issue.module}</span>}
+        {showSeverity && <td className={cell}><SeverityBadge severity={issue.severity} /></td>}
+        <td className={`${cell} max-w-0`}>
+          <div className="flex items-center gap-2 min-w-0">
+            {!showSeverity && <SeverityIcon severity={issue.severity} className="w-3.5 h-3.5" />}
+            <button onClick={onSelectIssue} className="text-left text-fg hover:text-accent hover:underline truncate" title={issue.message}>
+              {issue.message}
+            </button>
+            {issue.rule && <span className="shrink-0 font-mono text-xs text-fg-subtle">{issue.rule}</span>}
+            {issue.module && <span className="shrink-0 px-1.5 rounded bg-violet-soft text-violet font-mono text-xs">{issue.module}</span>}
           </div>
         </td>
-        <td className="td max-w-0">
+        {showValue && (
+          <td className={cell}>
+            {measure ? (
+              <div className="flex items-center gap-2" title={measure.threshold ? `${measure.value}, threshold ${measure.threshold}` : String(measure.value)}>
+                <span className="font-mono text-xs tabular-nums w-6 text-right">{measure.value}</span>
+                <div className="relative flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-violet" style={{ width: `${(measure.value / maxValue) * 100}%` }} />
+                  {measure.threshold && <span className="absolute inset-y-0 w-px bg-fg-subtle" style={{ left: `${(measure.threshold / maxValue) * 100}%` }} aria-hidden="true" />}
+                </div>
+              </div>
+            ) : <span className="text-xs text-fg-subtle">—</span>}
+          </td>
+        )}
+        <td className={`${cell} max-w-0`}>
           <div className="flex items-center gap-1 min-w-0">
             <button
               onClick={onToggleSnippet}
@@ -317,7 +387,7 @@ function IssueRow({ issue, selected, expanded, onToggleSelect, onSelectIssue, on
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={COLS} className="p-0 border-t border-line">
+          <td colSpan={cols} className="p-0 border-t border-line">
             {expanded.error ? (
               <p className="px-6 py-3 text-sm text-danger">{expanded.error}</p>
             ) : !expanded.data ? (

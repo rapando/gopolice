@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Check, Copy, ExternalLink } from 'lucide-react'
 import { editorURL, fileLocation } from '../lib/editor'
+import { splitPath } from '../lib/issues'
 
 interface Props {
   file: string
@@ -18,6 +19,15 @@ export default function FileLink({ file, line, onClick, className = '' }: Props)
   const [copied, setCopied] = useState(false)
   const loc = fileLocation(file, line)
   const href = editorURL(file, line)
+  const { dir, name } = splitPath(file)
+  // The file name is what the eye looks for; the directory is context.
+  const text = (
+    <>
+      <span className="text-fg-subtle">{dir}</span>
+      <span className="font-medium">{name}</span>
+      {line ? <span className="text-fg-subtle">:{line}</span> : null}
+    </>
+  )
 
   const copy = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -34,10 +44,10 @@ export default function FileLink({ file, line, onClick, className = '' }: Props)
     <span className={`group/file inline-flex items-center gap-1 min-w-0 font-mono text-xs ${className}`}>
       {onClick ? (
         <button onClick={onClick} className="text-accent hover:underline truncate text-left" title={loc}>
-          {loc}
+          {text}
         </button>
       ) : (
-        <span className="text-fg-muted truncate" title={loc}>{loc}</span>
+        <span className="text-fg-muted truncate" title={loc}>{text}</span>
       )}
       <button
         onClick={copy}

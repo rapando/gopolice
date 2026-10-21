@@ -13,6 +13,9 @@ export interface Issue {
   solution: string
   module: string
   git_blame: BlameInfo | null
+  /** The measured number behind the issue (cyclomatic complexity), when there is one. */
+  value?: number
+  threshold?: number
 }
 
 export interface BlameInfo {
@@ -39,10 +42,23 @@ export interface ScanResult {
   go_files: number
   total_lines: number
   modules: string[] | null
+  /** Whether each external tool ran; absent in results from older scans. */
+  tools?: ToolStatus[] | null
+}
+
+export interface ToolStatus {
+  scanner: string
+  tool: string
+  status: 'ran' | 'missing' | 'failed'
+  findings: number
+  error?: string
+  install?: string
 }
 
 export interface BenchmarkResult {
   name: string
+  /** Import path the benchmark ran in; links it to its package profile. */
+  package?: string
   iterations: number
   time_per_op: number
   bytes_per_op: number
@@ -50,6 +66,14 @@ export interface BenchmarkResult {
 }
 
 export interface ProfileData {
+  cpu: ProfileEntry[] | null
+  mem: ProfileEntry[] | null
+  /** Per-package profiles; absent in results from older scans. */
+  packages?: PackageProfile[] | null
+}
+
+export interface PackageProfile {
+  package: string
   cpu: ProfileEntry[] | null
   mem: ProfileEntry[] | null
 }

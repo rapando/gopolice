@@ -14,7 +14,7 @@ export default function DeadCode({ issues, onSelectIssue, onSelectFile }: Props)
   const deadIssues = issues.filter((i) => i.category === 'deadcode')
 
   return (
-    <div className="max-w-6xl mx-auto p-8">
+    <div className="page">
       <p className="text-sm text-fg-muted mb-4">
         Unused functions, types, constants and variables reported by <code className="font-mono">staticcheck</code> (U1000).
       </p>

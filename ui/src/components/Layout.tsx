@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from 'react'
 import {
-  ArrowLeft, FlaskConical, Gauge, GitBranch, Ghost, History, LayoutDashboard, LoaderCircle, LogOut, Network,
-  Play, Settings, ShieldAlert, ShieldCheck, TriangleAlert, type LucideIcon,
+  ArrowLeft, FlaskConical, Gauge, GitBranch, Ghost, History, LayoutDashboard, LoaderCircle, LogOut, Menu, MoreHorizontal, Network,
+  Play, Settings, ShieldAlert, ShieldCheck, TriangleAlert, X, type LucideIcon,
 } from 'lucide-react'
 import { getVersion } from '../api/client'
 import { setProjectDir } from '../lib/editor'
@@ -28,6 +28,8 @@ interface LayoutProps {
   onClearHistorical?: () => void
   projectName?: string
   scanTime?: string
+  /** Nanoseconds, from the scan result. */
+  scanDuration?: number
   branch?: string
   /** Present in service mode: links back to the repository list and signs out. */
   service?: { username?: string; onLogout: () => void }
@@ -81,9 +83,31 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`
 }
 
-export default function Layout({ page, counts, scanning, onScan, onShowScan, children, historicalLabel, onClearHistorical, projectName, scanTime, branch, service }: LayoutProps) {
+function fmtScanDuration(ns: number): string {
+  const s = Math.round(ns / 1e9)
+  if (s < 60) return `${s}s`
+  return `${Math.floor(s / 60)}m ${(s % 60).toString().padStart(2, '0')}s`
+}
+
+export default function Layout({ page, counts, scanning, onScan, onShowScan, children, historicalLabel, onClearHistorical, projectName, scanTime, scanDuration, branch, service }: LayoutProps) {
   const [version, setVersion] = useState('')
   const [, tick] = useState(0)
+  const [hasSearch, setHasSearch] = useState(false)
+  // Below lg the sidebar is a drawer; it closes on navigation and Escape.
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  useEffect(() => { setDrawerOpen(false) }, [page])
+  useEffect(() => {
+    if (!drawerOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawerOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [drawerOpen])
+
+  // The "/" hint only makes sense on pages that render a search box.
+  useEffect(() => {
+    const present = !!document.querySelector('main input[type="search"]')
+    if (present !== hasSearch) setHasSearch(present)
+  })
 
   useEffect(() => {
     getVersion().then((r) => {
@@ -113,13 +137,24 @@ export default function Layout({ page, counts, scanning, onScan, onShowScan, chi
   }, [])
 
   const current = allItems.find((i) => i.page === page || i.also?.includes(page))
+  const shortName = projectName ? (projectName.split('/').pop() || projectName) : ''
 
   return (
     <div className="flex h-screen bg-canvas text-fg">
-      <aside className="w-60 shrink-0 bg-surface border-r border-line flex flex-col">
+      {drawerOpen && (
+        <div className="fixed inset-0 z-30 bg-inverse/50 lg:hidden" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-60 shrink-0 bg-surface border-r border-line flex flex-col transition-transform lg:static lg:translate-x-0 ${drawerOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full'}`}
+        aria-label="Sidebar"
+        aria-hidden={!drawerOpen ? undefined : false}
+      >
         <div className="h-14 px-4 flex items-center gap-2 border-b border-line">
           <ShieldCheck className="w-5 h-5 text-accent" aria-hidden="true" />
           <span className="font-mono font-semibold text-[15px] tracking-tight">gopolice</span>
+          <button onClick={() => setDrawerOpen(false)} className="btn-ghost p-1 ml-auto lg:hidden" aria-label="Close menu">
+            <X className="w-4 h-4" aria-hidden="true" />
+          </button>
         </div>
 
         {service && (
@@ -133,19 +168,22 @@ export default function Layout({ page, counts, scanning, onScan, onShowScan, chi
         )}
 
         {projectName && (
-          <div className="px-4 py-3 border-b border-line">
-            <p className="font-mono text-sm font-medium truncate" title={projectName}>{projectName}</p>
-            <div className="mt-1 flex items-center gap-2 text-xs text-fg-muted">
-              {branch && (
-                <span className="inline-flex items-center gap-1 min-w-0">
-                  <GitBranch className="w-3 h-3 shrink-0" aria-hidden="true" />
-                  <span className="font-mono truncate">{branch}</span>
-                </span>
-              )}
-              {scanTime && (
-                <span className="shrink-0" title={new Date(scanTime).toLocaleString()}>· {timeAgo(scanTime)}</span>
-              )}
-            </div>
+          <div className="px-4 py-3 border-b border-line min-w-0">
+            <p className="text-[15px] font-semibold truncate" title={projectName}>{projectName.split('/').pop() || projectName}</p>
+            {projectName.includes('/') && (
+              <p className="font-mono text-[11px] text-fg-subtle truncate" title={projectName}>{projectName}</p>
+            )}
+            {branch && (
+              <p className="mt-1 inline-flex items-center gap-1 min-w-0 max-w-full text-xs text-fg-muted">
+                <GitBranch className="w-3 h-3 shrink-0" aria-hidden="true" />
+                <span className="font-mono truncate" title={branch}>{branch}</span>
+              </p>
+            )}
+            {scanTime && (
+              <p className="text-xs text-fg-subtle" title={new Date(scanTime).toLocaleString()}>
+                Scanned {timeAgo(scanTime)}{scanDuration ? ` · ${fmtScanDuration(scanDuration)}` : ''}
+              </p>
+            )}
           </div>
         )}
 
@@ -182,34 +220,46 @@ export default function Layout({ page, counts, scanning, onScan, onShowScan, chi
             </div>
           )}
           <div className="mt-2 px-2 flex items-center justify-between">
-            <span className="text-xs text-fg-subtle font-mono truncate">{version}</span>
+            <span className="text-xs text-fg-subtle font-mono truncate" title={version}>{version.replace(/-0\.\d{14}-[0-9a-f]+/, '-dev')}</span>
             <ThemeToggle />
           </div>
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 shrink-0 bg-surface border-b border-line flex items-center gap-3 px-6">
-          <h1 className="text-base font-semibold truncate">{current?.label ?? ''}</h1>
-          <div className="flex-1" />
-          <span className="hidden md:inline text-xs text-fg-subtle">
-            Press <kbd className="kbd">/</kbd> to search
-          </span>
+        <header className="h-14 shrink-0 bg-surface border-b border-line flex items-center gap-3 px-4 lg:px-6">
+          <button onClick={() => setDrawerOpen(true)} className="btn-ghost p-1.5 -ml-1.5 lg:hidden" aria-label="Open menu" aria-expanded={drawerOpen}>
+            <Menu className="w-5 h-5" aria-hidden="true" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-base font-semibold truncate leading-tight">{current?.label ?? ''}</h1>
+            {shortName && (
+              <p className="lg:hidden text-xs text-fg-muted truncate leading-tight">
+                {shortName}{branch && <span className="font-mono"> · {branch}</span>}
+              </p>
+            )}
+          </div>
+          {hasSearch && (
+            <span className="hidden md:inline text-xs text-fg-subtle">
+              Press <kbd className="kbd">/</kbd> to search
+            </span>
+          )}
           <button
             onClick={scanning ? onShowScan : onScan}
             disabled={scanning && !onShowScan}
-            className={scanning ? 'btn-secondary min-w-[7.5rem]' : 'btn-primary min-w-[7.5rem]'}
-            title={scanning ? 'Show scan progress' : undefined}
+            className={`${scanning ? 'btn-secondary' : 'btn-primary'} lg:min-w-[7.5rem] px-2.5 lg:px-3`}
+            title={scanning ? 'Show scan progress' : 'Run scan'}
+            aria-label={scanning ? 'Show scan progress' : 'Run scan'}
           >
             {scanning ? (
               <>
                 <LoaderCircle className="w-4 h-4 animate-spin text-accent" aria-hidden="true" />
-                Scanning…
+                <span className="hidden lg:inline">Scanning…</span>
               </>
             ) : (
               <>
                 <Play className="w-4 h-4" aria-hidden="true" />
-                Run scan
+                <span className="hidden lg:inline">Run scan</span>
               </>
             )}
           </button>
@@ -227,11 +277,36 @@ export default function Layout({ page, counts, scanning, onScan, onShowScan, chi
           </div>
         )}
 
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-auto pb-14 lg:pb-0">{children}</main>
+
+        <nav className="lg:hidden fixed bottom-0 inset-x-0 z-20 h-14 bg-surface border-t border-line grid grid-cols-5" aria-label="Quick navigation">
+          {TAB_BAR.map((p) => {
+            const item = allItems.find((i) => i.page === p)!
+            const active = item === current
+            return (
+              <a
+                key={p}
+                href={routeToHash({ page: p })}
+                aria-current={active ? 'page' : undefined}
+                className={`flex flex-col items-center justify-center gap-0.5 text-[11px] ${active ? 'text-accent' : 'text-fg-muted'}`}
+              >
+                <item.Icon className="w-5 h-5" aria-hidden="true" />
+                {item.label}
+              </a>
+            )
+          })}
+          <button onClick={() => setDrawerOpen(true)} className="flex flex-col items-center justify-center gap-0.5 text-[11px] text-fg-muted" aria-label="More pages">
+            <MoreHorizontal className="w-5 h-5" aria-hidden="true" />
+            More
+          </button>
+        </nav>
       </div>
     </div>
   )
 }
+
+/** The four most-used pages get a tab on narrow screens; More opens the drawer. */
+const TAB_BAR: Page[] = ['dashboard', 'issues', 'tests', 'performance']
 
 function NavLink({ item, active, counts }: { item: NavItem; active: boolean; counts: NavCounts | null }) {
   const badge = counts && item.count ? item.count(counts) : null

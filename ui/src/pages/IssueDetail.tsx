@@ -53,7 +53,7 @@ export default function IssueDetail({ issueId, onBack }: Props) {
 
   if (error || !issue) {
     return (
-      <div className="max-w-4xl mx-auto p-8">
+      <div className="page">
         <BackLink onClick={onBack} />
         {error ? <div className="card p-8 text-center text-fg-muted">{error}</div> : <div className="flex justify-center py-16"><Spinner /></div>}
       </div>
@@ -64,7 +64,7 @@ export default function IssueDetail({ issueId, onBack }: Props) {
   const blame = issue.git_blame
 
   return (
-    <div className="max-w-5xl mx-auto p-8">
+    <div className="page">
       <BackLink onClick={onBack} />
 
       <article className="card overflow-hidden">

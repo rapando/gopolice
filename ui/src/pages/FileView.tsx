@@ -28,7 +28,7 @@ export default function FileView({ filePath, issues, onBack }: Props) {
   }, [filePath, lineNumbers])
 
   return (
-    <div className="max-w-5xl mx-auto p-8">
+    <div className="page">
       <BackLink onClick={onBack} />
 
       <div className="flex items-baseline gap-3 mb-5 min-w-0">

@@ -19,7 +19,7 @@ const LINKS: { page: Page; label: string }[] = [
 export default function ServiceShell({ page, username, onLogout, children }: Props) {
   return (
     <div className="flex flex-col h-screen bg-canvas text-fg">
-      <header className="h-14 shrink-0 bg-surface border-b border-line flex items-center gap-6 px-6">
+      <header className="h-14 shrink-0 bg-surface border-b border-line flex items-center gap-3 sm:gap-6 px-4 sm:px-6">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-5 h-5 text-accent" aria-hidden="true" />
           <span className="font-mono font-semibold text-[15px] tracking-tight">gopolice</span>

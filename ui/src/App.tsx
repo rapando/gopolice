@@ -183,6 +183,7 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
       onClearHistorical={handleClearHistorical}
       projectName={result?.project_name}
       scanTime={result?.scan_time}
+      scanDuration={result?.duration}
       branch={result?.git_info?.branch}
       service={service}
     >
@@ -208,7 +209,7 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
       ) : page === 'file' && param ? (
         <FileView filePath={param} issues={result?.issues ?? []} onBack={back} />
       ) : page === 'tests' ? (
-        <Tests testResult={result?.test_results ?? null} onScan={handleScan} scanning={scanning} onSelectTest={goTest} />
+        <Tests testResult={result?.test_results ?? null} projectName={result?.project_name} onScan={handleScan} scanning={scanning} onSelectTest={goTest} />
       ) : page === 'testdetail' ? (
         <TestDetail testResult={result?.test_results ?? null} issues={result?.issues ?? []} pkgName={param ?? ''} testName={param2 ?? ''} onBack={back} />
       ) : page === 'performance' ? (
@@ -216,13 +217,13 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
       ) : page === 'deadcode' ? (
         <DeadCode issues={result?.issues ?? []} onSelectIssue={goIssue} onSelectFile={goFile} onScan={handleScan} scanning={scanning} />
       ) : page === 'depgraph' ? (
-        <DepGraph depGraph={result?.dep_graph ?? null} onScan={handleScan} scanning={scanning} />
+        <DepGraph depGraph={result?.dep_graph ?? null} deps={result?.deps} onScan={handleScan} scanning={scanning} />
       ) : page === 'security' ? (
-        <Security issues={result?.issues ?? []} onSelectIssue={goIssue} onScan={handleScan} scanning={scanning} />
+        <Security issues={result?.issues ?? []} tools={result?.tools} onSelectIssue={goIssue} onScan={handleScan} scanning={scanning} />
       ) : page === 'git' ? (
         <GitStats gitInfo={result?.git_info ?? null} onScan={handleScan} scanning={scanning} />
       ) : page === 'history' ? (
-        <History onLoadResult={handleLoadResult} />
+        <History onLoadResult={handleLoadResult} onScan={handleScan} />
       ) : page === 'config' ? (
         <ConfigPage />
       ) : null}

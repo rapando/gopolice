@@ -35,6 +35,11 @@ type Issue struct {
 	Solution string     `json:"solution,omitempty"`
 	Module   string     `json:"module,omitempty"`
 	GitBlame *BlameInfo `json:"git_blame,omitempty"`
+	// Value is the measured number behind the issue (cyclomatic complexity),
+	// and Threshold the limit it exceeded, so the UI can sort and chart it
+	// instead of parsing the message.
+	Value     int `json:"value,omitempty"`
+	Threshold int `json:"threshold,omitempty"`
 }
 
 type BlameInfo struct {
@@ -152,10 +157,58 @@ type ScanResult struct {
 	GoFiles     int               `json:"go_files"`
 	TotalLines  int               `json:"total_lines"`
 	Modules     []string          `json:"modules,omitempty"`
+	// Tools records whether each external tool a scanner relies on ran, so
+	// "no issues" can be told apart from "nothing was checked".
+	Tools []ToolStatus `json:"tools,omitempty"`
+}
+
+// Tool status values.
+const (
+	ToolRan     = "ran"
+	ToolMissing = "missing"
+	ToolFailed  = "failed"
+)
+
+// ToolStatus is one external tool's outcome in a scan.
+type ToolStatus struct {
+	Scanner  string `json:"scanner"`
+	Tool     string `json:"tool"`
+	Status   string `json:"status"`
+	Findings int    `json:"findings"`
+	Error    string `json:"error,omitempty"`
+	// Install is the command that would make a missing tool available.
+	Install string `json:"install,omitempty"`
+}
+
+// MergeToolStatus combines per-module tool outcomes into one entry per tool:
+// findings add up, and a failure or a missing tool anywhere wins over ran.
+func MergeToolStatus(lists ...[]ToolStatus) []ToolStatus {
+	var out []ToolStatus
+	index := map[string]int{}
+	rank := map[string]int{ToolRan: 0, ToolFailed: 1, ToolMissing: 2}
+	for _, list := range lists {
+		for _, t := range list {
+			i, ok := index[t.Tool]
+			if !ok {
+				index[t.Tool] = len(out)
+				out = append(out, t)
+				continue
+			}
+			out[i].Findings += t.Findings
+			if rank[t.Status] > rank[out[i].Status] {
+				out[i].Status = t.Status
+				out[i].Error = t.Error
+			}
+		}
+	}
+	return out
 }
 
 type BenchmarkResult struct {
-	Name        string        `json:"name"`
+	Name string `json:"name"`
+	// Package is the import path the benchmark ran in, which links it to
+	// that package's profile.
+	Package     string        `json:"package,omitempty"`
 	Iterations  int           `json:"iterations"`
 	TimePerOp   time.Duration `json:"time_per_op"`
 	BytesPerOp  int64         `json:"bytes_per_op"`
@@ -165,6 +218,17 @@ type BenchmarkResult struct {
 type ProfileData struct {
 	CPU []ProfileEntry `json:"cpu,omitempty"`
 	Mem []ProfileEntry `json:"mem,omitempty"`
+	// Packages keeps each package's profile apart. CPU and Mem above merge
+	// them, which is handy for a top list but loses which benchmark a frame
+	// belongs to.
+	Packages []PackageProfile `json:"packages,omitempty"`
+}
+
+// PackageProfile is the CPU and memory profile of one package's benchmarks.
+type PackageProfile struct {
+	Package string         `json:"package"`
+	CPU     []ProfileEntry `json:"cpu,omitempty"`
+	Mem     []ProfileEntry `json:"mem,omitempty"`
 }
 
 type ProfileEntry struct {

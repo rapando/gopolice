@@ -76,12 +76,18 @@ func (s *ProfileScanner) Run(ctx context.Context, cfg *config.Config, progress c
 		cmd.Dir = projectDir
 		_, _ = cmd.CombinedOutput()
 
+		pp := model.PackageProfile{Package: pkg}
 		if entries, err := parsePprofOutput(ctx, cpuProfile); err == nil && len(entries) > 0 {
 			data.CPU = append(data.CPU, entries...)
+			pp.CPU = entries
 		}
 
 		if entries, err := parsePprofOutput(ctx, memProfile); err == nil && len(entries) > 0 {
 			data.Mem = append(data.Mem, entries...)
+			pp.Mem = entries
+		}
+		if pp.CPU != nil || pp.Mem != nil {
+			data.Packages = append(data.Packages, pp)
 		}
 
 		_ = os.RemoveAll(tmpDir)
