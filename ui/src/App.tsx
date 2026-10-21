@@ -217,7 +217,7 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
       ) : page === 'deadcode' ? (
         <DeadCode issues={result?.issues ?? []} onSelectIssue={goIssue} onSelectFile={goFile} onScan={handleScan} scanning={scanning} />
       ) : page === 'depgraph' ? (
-        <DepGraph depGraph={result?.dep_graph ?? null} onScan={handleScan} scanning={scanning} />
+        <DepGraph depGraph={result?.dep_graph ?? null} deps={result?.deps} onScan={handleScan} scanning={scanning} />
       ) : page === 'security' ? (
         <Security issues={result?.issues ?? []} tools={result?.tools} onSelectIssue={goIssue} onScan={handleScan} scanning={scanning} />
       ) : page === 'git' ? (
