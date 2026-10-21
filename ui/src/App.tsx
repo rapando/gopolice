@@ -209,7 +209,7 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
       ) : page === 'file' && param ? (
         <FileView filePath={param} issues={result?.issues ?? []} onBack={back} />
       ) : page === 'tests' ? (
-        <Tests testResult={result?.test_results ?? null} onScan={handleScan} scanning={scanning} onSelectTest={goTest} />
+        <Tests testResult={result?.test_results ?? null} projectName={result?.project_name} onScan={handleScan} scanning={scanning} onSelectTest={goTest} />
       ) : page === 'testdetail' ? (
         <TestDetail testResult={result?.test_results ?? null} issues={result?.issues ?? []} pkgName={param ?? ''} testName={param2 ?? ''} onBack={back} />
       ) : page === 'performance' ? (

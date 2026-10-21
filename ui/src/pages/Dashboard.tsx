@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { ArrowRight, CircleCheck, CircleX, FlaskConical, GitBranch, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
-import { ScanResult, type Issue, type TestPackage } from '../api/client'
+import { ScanResult, type Issue } from '../api/client'
 import { useThemeColors } from '../hooks/useThemeColors'
 import { SeverityIcon } from '../components/Severity'
 import Trends from '../components/Trends'
@@ -11,6 +11,8 @@ import type { ScanState } from '../lib/scan'
 import { gradeDetails } from '../lib/grade'
 import { compareBySeverityThenValue, issueMeasure, issueSubject } from '../lib/issues'
 import { securitySummary } from '../lib/security'
+import { COVERAGE_TARGET, averageCoverage, packagesWithTests, rateStatus, shortPackage } from '../lib/coverage'
+import CoverageBar from '../components/CoverageBar'
 
 interface Props {
   result: ScanResult | null
@@ -43,17 +45,6 @@ const GRADE_STYLE: Record<string, { text: string; bg: string; bar: string; note:
   F: { text: 'text-danger', bg: 'bg-danger-soft', bar: 'bg-danger', note: 'Errors need attention' },
 }
 
-/** Coverage target the bars are measured against. */
-const COVERAGE_TARGET = 80
-
-/** Coverage/pass-rate status: color plus a word, never color alone. */
-export function rateStatus(pct: number | null): { color: (c: ReturnType<typeof useThemeColors>) => string; text: string; bar: string; label: string } {
-  if (pct === null) return { color: (c) => c.muted, text: 'text-fg-muted', bar: 'bg-muted', label: 'n/a' }
-  if (pct >= COVERAGE_TARGET) return { color: (c) => c.good, text: 'text-success', bar: 'bg-success', label: 'good' }
-  if (pct >= 50) return { color: (c) => c.warn, text: 'text-warning', bar: 'bg-warning', label: 'fair' }
-  return { color: (c) => c.bad, text: 'text-danger', bar: 'bg-danger', label: 'low' }
-}
-
 function Ring({ pct, color, size = 52 }: { pct: number; color: string; size?: number }) {
   const sw = 6
   const r = (size - sw) / 2
@@ -64,16 +55,6 @@ function Ring({ pct, color, size = 52 }: { pct: number; color: string; size?: nu
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={sw} className="stroke-muted" />
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={sw} strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="round" transform={`rotate(-90 ${size / 2} ${size / 2})`} />
     </svg>
-  )
-}
-
-/** A bar with a tick at the target, so "how far from 80%" reads at a glance. */
-export function TargetBar({ pct, className, target = COVERAGE_TARGET }: { pct: number; className: string; target?: number }) {
-  return (
-    <div className="relative w-full h-2 bg-muted rounded-full">
-      <div className={`h-full rounded-full ${className}`} style={{ width: `${Math.max(0, Math.min(pct, 100))}%` }} />
-      <span className="absolute top-[-2px] h-3 w-px bg-line-strong" style={{ left: `${target}%` }} aria-hidden="true" />
-    </div>
   )
 }
 
@@ -115,9 +96,7 @@ function LineCard({ to, title, children }: { to: Page; title: string; children: 
   )
 }
 
-function shortPkg(name: string, project: string): string {
-  return name.replace(project + '/', '') || name
-}
+const shortPkg = shortPackage
 
 export default function Dashboard({ result, scan, scanning, readingResults, onScan, onShowScan }: Props) {
   const colors = useThemeColors()
@@ -144,8 +123,8 @@ export default function Dashboard({ result, scan, scanning, readingResults, onSc
   const testResult = result.test_results
   const total = testResult?.total
   const passRate = total && total.total > 0 ? (total.passed / total.total) * 100 : null
-  const withTests: TestPackage[] = testResult?.packages.filter((p) => (p.tests?.length ?? 0) > 0 || p.coverage > 0) ?? []
-  const avgCoverage = withTests.length > 0 ? withTests.reduce((s, p) => s + p.coverage, 0) / withTests.length : null
+  const withTests = packagesWithTests(testResult?.packages ?? [])
+  const avgCoverage = averageCoverage(testResult?.packages ?? [])
   const gradeStyle = GRADE_STYLE[grade.grade] ?? GRADE_STYLE.C
   const totalComments = result.file_stats?.reduce((s, f) => s + f.comment_lines, 0) ?? 0
   const totalCode = result.file_stats?.reduce((s, f) => s + f.code_lines, 0) ?? 0
@@ -203,7 +182,7 @@ export default function Dashboard({ result, scan, scanning, readingResults, onSc
 
         <Card to="tests" title="Tests">
           <div className="flex items-center gap-3">
-            <Ring pct={passRate ?? 0} color={passStatus.color(colors)} />
+            <Ring pct={passRate ?? 0} color={colors[passStatus.key]} />
             <div className="min-w-0">
               <p className="text-3xl font-semibold tabular-nums">
                 {total ? total.passed : '—'}{total && <span className="text-base text-fg-subtle font-normal">/{total.total}</span>}
@@ -224,7 +203,7 @@ export default function Dashboard({ result, scan, scanning, readingResults, onSc
 
         <Card to="tests" title="Coverage">
           <div className="flex items-center gap-3">
-            <Ring pct={avgCoverage ?? 0} color={covStatus.color(colors)} />
+            <Ring pct={avgCoverage ?? 0} color={colors[covStatus.key]} />
             <div className="min-w-0">
               <p className="text-3xl font-semibold tabular-nums">{avgCoverage !== null ? `${avgCoverage.toFixed(0)}%` : '—'}</p>
               <p className="text-sm text-fg-muted truncate">
@@ -250,7 +229,7 @@ export default function Dashboard({ result, scan, scanning, readingResults, onSc
                 return (
                   <li key={p.name} className="grid grid-cols-[minmax(0,1fr)_7rem_2.75rem] items-center gap-3 text-sm">
                     <span className="font-mono text-[13px] truncate" title={p.name}>{shortPkg(p.name, result.project_name)}</span>
-                    <TargetBar pct={p.coverage} className={st.bar} />
+                    <CoverageBar pct={p.coverage} />
                     <span className={`text-right tabular-nums font-medium ${st.text}`}>{p.coverage.toFixed(0)}%</span>
                   </li>
                 )

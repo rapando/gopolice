@@ -114,6 +114,26 @@ ok  	github.com/example/pkg	0.500s`
 	}
 }
 
+func TestParseTestOutput_NoTestFilesIsNotSkipped(t *testing.T) {
+	out := "=== RUN   TestA\n--- PASS: TestA (0.00s)\n=== RUN   TestB\n--- SKIP: TestB (0.00s)\nok  \tmod/a\t0.1s\n?   \tmod/b\t[no test files]\n"
+	r := parseTestOutput(out)
+	if r.Total.Total != 2 || r.Total.Passed != 1 || r.Total.Skipped != 1 || r.Total.Failed != 0 {
+		t.Errorf("totals = %+v, want 2 total, 1 passed, 1 skipped", r.Total)
+	}
+	if r.Total.Passed+r.Total.Failed+r.Total.Skipped != r.Total.Total {
+		t.Errorf("totals do not add up: %+v", r.Total)
+	}
+	var noTests int
+	for _, p := range r.Packages {
+		if p.Status == "?" {
+			noTests++
+		}
+	}
+	if noTests != 1 {
+		t.Errorf("want one package without test files, got %d", noTests)
+	}
+}
+
 func TestParseTestOutput_Empty(t *testing.T) {
 	result := parseTestOutput("")
 	if len(result.Packages) != 0 {

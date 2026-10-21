@@ -211,10 +211,6 @@ func parseTestOutput(output string) *model.TestResult {
 			}
 			lastCoverage = 0
 
-			if status == "?" {
-				result.Total.Skipped++
-			}
-
 			pendingTest = nil
 			continue
 		}

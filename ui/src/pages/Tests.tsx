@@ -2,89 +2,107 @@ import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { TestResult, TestPackage } from '../api/client'
 import TestStatus from '../components/TestStatus'
+import StatTile from '../components/StatTile'
+import CoverageBar from '../components/CoverageBar'
 import { sortTests } from '../lib/tests'
+import { averageCoverage, packagesWithTests, rateStatus, shortPackage } from '../lib/coverage'
 import EmptyState from '../components/EmptyState'
 
 interface Props {
   testResult: TestResult | null
+  projectName?: string
   onScan?: () => void
   scanning?: boolean
   onSelectTest?: (pkgName: string, testName: string) => void
 }
 
+export default function Tests({ testResult, projectName, onScan, scanning, onSelectTest }: Props) {
+  if (!testResult) {
+    return (
+      <div className="page">
+        <EmptyState message="No test results available." onScan={onScan} scanning={scanning} />
+      </div>
+    )
+  }
+  if (!testResult.total) {
+    return (
+      <div className="page">
+        <div className="card p-10 text-center">
+          <p className="text-fg-muted mb-3">Test result data is incomplete: the scan may not have produced full output for this run.</p>
+          <details className="text-left max-w-lg mx-auto">
+            <summary className="text-xs text-fg-subtle cursor-pointer select-none hover:text-fg-muted">Technical details</summary>
+            <pre className="mt-2 text-xs text-left bg-subtle p-3 rounded overflow-auto">{JSON.stringify(testResult, null, 2)}</pre>
+          </details>
+        </div>
+      </div>
+    )
+  }
 
-export default function Tests({ testResult, onScan, scanning, onSelectTest }: Props) {
+  const total = testResult.total
+  const packages = testResult.packages ?? []
+  const tested = packagesWithTests(packages)
+  const coverage = averageCoverage(packages)
+  const covStatus = rateStatus(coverage)
+
   return (
     <div className="page">
-      {!testResult ? (
-        <EmptyState message="No test results available." onScan={onScan} scanning={scanning} />
-      ) : (
-        <>
-          {!testResult.total ? (
-            <div className="bg-surface border border-line rounded p-10 text-center">
-              <p className="text-fg-muted mb-3">Test result data is incomplete — the scan may not have produced full output for this run.</p>
-              <details className="text-left max-w-lg mx-auto">
-                <summary className="text-xs text-fg-subtle cursor-pointer select-none hover:text-fg-muted">Technical details</summary>
-                <pre className="mt-2 text-xs text-left bg-subtle p-3 rounded overflow-auto">
-                  {JSON.stringify(testResult, null, 2)}
-                </pre>
-              </details>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className="card px-5 py-4">
-                  <p className="text-sm text-fg-muted mb-0.5">Total</p>
-                  <p className="text-2xl font-semibold tabular-nums">{testResult.total.total}</p>
-                </div>
-                <div className="card px-5 py-4">
-                  <p className="text-sm text-fg-muted mb-0.5">Passed</p>
-                  <p className="text-2xl font-semibold tabular-nums text-success">{testResult.total.passed}</p>
-                </div>
-                <div className="card px-5 py-4">
-                  <p className="text-sm text-fg-muted mb-0.5">Failed</p>
-                  <p className={`text-2xl font-semibold tabular-nums ${testResult.total.failed > 0 ? 'text-danger' : ''}`}>
-                    {testResult.total.failed}
-                  </p>
-                </div>
-                <div className="card px-5 py-4">
-                  <p className="text-sm text-fg-muted mb-0.5">Pass rate</p>
-                  <p className="text-2xl font-semibold tabular-nums">
-                    {testResult.total.total > 0
-                      ? ((testResult.total.passed / testResult.total.total) * 100).toFixed(1)
-                      : '0'}%
-                  </p>
-                </div>
-              </div>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <StatTile label="Tests" value={total.total} sub={`in ${tested.length} package${tested.length === 1 ? '' : 's'}`} />
+        <StatTile label="Passed" value={total.passed} tone={total.passed > 0 ? 'success' : 'default'} />
+        <StatTile label="Failed" value={total.failed} tone={total.failed > 0 ? 'danger' : 'default'} />
+        <StatTile label="Skipped" value={total.skipped} tone={total.skipped > 0 ? 'warning' : 'muted'} sub={total.skipped > 0 ? 'called t.Skip' : undefined} />
+        <StatTile
+          label="Coverage"
+          value={coverage === null ? '—' : `${coverage.toFixed(0)}%`}
+          tone={covStatus.key === 'good' ? 'success' : covStatus.key === 'warn' ? 'warning' : covStatus.key === 'bad' ? 'danger' : 'muted'}
+          sub={coverage === null ? 'no coverage reported' : `${covStatus.label} · average of ${tested.length} package${tested.length === 1 ? '' : 's'}`}
+        />
+      </div>
 
-              {!testResult.packages || testResult.packages.length === 0 ? (
-                <div className="card p-8 text-center text-fg-muted">No test packages found.</div>
-              ) : (
-                <PackageList packages={testResult.packages} onSelectTest={onSelectTest} />
-              )}
-            </>
-          )}
-        </>
+      {packages.length === 0 ? (
+        <div className="card p-8 text-center text-fg-muted">No test packages found.</div>
+      ) : (
+        <PackageList packages={packages} projectName={projectName} onSelectTest={onSelectTest} />
       )}
     </div>
   )
 }
 
-function PackageList({ packages, onSelectTest }: { packages: TestPackage[]; onSelectTest?: (pkg: string, test: string) => void }) {
+type SortKey = 'name' | 'coverage' | 'tests'
+
+const SORTS: { id: SortKey; label: string }[] = [
+  { id: 'name', label: 'Name' },
+  { id: 'coverage', label: 'Coverage, lowest first' },
+  { id: 'tests', label: 'Test count' },
+]
+
+function PackageList({ packages, projectName, onSelectTest }: { packages: TestPackage[]; projectName?: string; onSelectTest?: (pkg: string, test: string) => void }) {
   const [query, setQuery] = useState('')
   const [failingOnly, setFailingOnly] = useState(false)
-  const [open, setOpen] = useState<Set<string>>(() => new Set(packages.filter((p) => p.status !== 'ok').map((p) => p.name)))
+  const [sort, setSort] = useState<SortKey>('name')
+  const [open, setOpen] = useState<Set<string>>(() => new Set(packages.filter((p) => p.status !== 'ok' && p.status !== '?').map((p) => p.name)))
 
   const q = query.trim().toLowerCase()
   const visible = useMemo(() => {
+    const hasTests = (p: TestPackage) => (p.tests?.length ?? 0) > 0 || p.coverage > 0
+    const rank = (p: TestPackage) => (p.status === 'FAIL' ? 0 : hasTests(p) ? 1 : 2) // failing, tested, no tests
+    const cmp = (a: TestPackage, b: TestPackage) => {
+      const r = rank(a) - rank(b)
+      if (r !== 0) return r
+      switch (sort) {
+        case 'coverage': return a.coverage - b.coverage || a.name.localeCompare(b.name)
+        case 'tests': return (b.tests?.length ?? 0) - (a.tests?.length ?? 0) || a.name.localeCompare(b.name)
+        default: return a.name.localeCompare(b.name)
+      }
+    }
     return packages
       .map((p) => ({
         ...p,
         tests: (p.tests ?? []).filter((t) => (!failingOnly || t.status === 'FAIL') && (!q || t.name.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))),
       }))
       .filter((p) => p.tests.length > 0 || (!failingOnly && !q))
-      .sort((a, b) => Number(a.status === 'ok') - Number(b.status === 'ok') || a.name.localeCompare(b.name))
-  }, [packages, q, failingOnly])
+      .sort(cmp)
+  }, [packages, q, failingOnly, sort])
 
   const filtering = failingOnly || q !== ''
   const toggle = (name: string) => setOpen((prev) => {
@@ -97,7 +115,7 @@ function PackageList({ packages, onSelectTest }: { packages: TestPackage[]; onSe
   return (
     <>
       <div className="flex flex-wrap items-center gap-3 mb-3">
-        <div className="relative w-80">
+        <div className="relative w-80 max-w-full">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle pointer-events-none" aria-hidden="true" />
           <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter tests or packages…" aria-label="Filter tests" className="input w-full pl-8" />
         </div>
@@ -105,39 +123,59 @@ function PackageList({ packages, onSelectTest }: { packages: TestPackage[]; onSe
           <input type="checkbox" checked={failingOnly} onChange={(e) => setFailingOnly(e.target.checked)} className="w-4 h-4" />
           Failing only
         </label>
+        <label className="inline-flex items-center gap-2 text-sm text-fg-muted">
+          Sort
+          <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="input py-1">
+            {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </label>
         <div className="flex-1" />
         <button onClick={() => setOpen(new Set(packages.map((p) => p.name)))} className="btn-ghost">Expand all</button>
         <button onClick={() => setOpen(new Set())} className="btn-ghost">Collapse all</button>
       </div>
+
+      {projectName && (
+        <p className="mb-2 text-xs text-fg-subtle">Packages under <span className="font-mono">{projectName}</span></p>
+      )}
 
       {visible.length === 0 ? (
         <div className="card p-8 text-center text-fg-muted">No tests match.</div>
       ) : (
         <div className="space-y-2">
           {visible.map((pkg) => {
-            const isOpen = filtering || open.has(pkg.name)
+            const noTests = pkg.status === '?' || ((pkg.tests?.length ?? 0) === 0 && pkg.coverage === 0 && !filtering)
+            const isOpen = !noTests && (filtering || open.has(pkg.name))
             const failed = pkg.tests.filter((t) => t.status === 'FAIL').length
+            const skipped = pkg.tests.filter((t) => t.status === 'SKIP').length
             const Chevron = isOpen ? ChevronDown : ChevronRight
             return (
-              <section key={pkg.name} className="card overflow-hidden">
+              <section key={pkg.name} className={`card overflow-hidden ${noTests ? 'opacity-60' : ''}`}>
                 <button
-                  onClick={() => toggle(pkg.name)}
-                  aria-expanded={isOpen}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-subtle/60"
+                  onClick={() => !noTests && toggle(pkg.name)}
+                  aria-expanded={noTests ? undefined : isOpen}
+                  disabled={noTests}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-subtle/60 disabled:cursor-default disabled:hover:bg-transparent"
                 >
-                  <Chevron className="w-4 h-4 text-fg-muted shrink-0" aria-hidden="true" />
-                  <TestStatus status={pkg.status === 'ok' ? 'PASS' : pkg.status === '?' ? 'SKIP' : 'FAIL'} withLabel={false} />
-                  <span className="font-mono text-[13px] font-medium truncate flex-1">{pkg.name}</span>
+                  <Chevron className={`w-4 h-4 text-fg-muted shrink-0 ${noTests ? 'invisible' : ''}`} aria-hidden="true" />
+                  {noTests ? (
+                    <span className="w-4 h-4 shrink-0 rounded-full border border-line-strong" aria-hidden="true" />
+                  ) : (
+                    <TestStatus status={pkg.status === 'ok' ? 'PASS' : pkg.status === '?' ? 'SKIP' : 'FAIL'} withLabel={false} />
+                  )}
+                  <span className="font-mono text-[13px] font-medium truncate flex-1" title={pkg.name}>{shortPackage(pkg.name, projectName)}</span>
                   <span className="text-sm text-fg-muted tabular-nums shrink-0">
-                    {pkg.tests.length} test{pkg.tests.length === 1 ? '' : 's'}
-                    {failed > 0 && <span className="text-danger font-medium"> · {failed} failing</span>}
+                    {noTests ? 'no test files' : (
+                      <>
+                        {pkg.tests.length} test{pkg.tests.length === 1 ? '' : 's'}
+                        {failed > 0 && <span className="text-danger font-medium"> · {failed} failing</span>}
+                        {skipped > 0 && <span className="text-warning"> · {skipped} skipped</span>}
+                      </>
+                    )}
                   </span>
-                  {pkg.coverage > 0 && (
-                    <span className="flex items-center gap-2 shrink-0 w-32">
-                      <span className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                        <span className="block h-full bg-success rounded-full" style={{ width: `${Math.min(pkg.coverage, 100)}%` }} />
-                      </span>
-                      <span className="text-sm tabular-nums text-fg-muted w-10 text-right">{pkg.coverage.toFixed(0)}%</span>
+                  {!noTests && (
+                    <span className="flex items-center gap-2 shrink-0 w-36">
+                      <CoverageBar pct={pkg.coverage} className="flex-1" />
+                      <span className={`text-sm tabular-nums w-10 text-right font-medium ${rateStatus(pkg.coverage).text}`}>{pkg.coverage.toFixed(0)}%</span>
                     </span>
                   )}
                 </button>
