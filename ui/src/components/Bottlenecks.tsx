@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { BenchmarkResult, ProfileData } from '../api/client'
-import { benchShortName, calleesFor, diagnose, median, profileFor, type Callee } from '../lib/perf'
+import { analyzeBenchmarks, benchShortName, type BenchAnalysis, type Callee } from '../lib/perf'
 
 interface Props {
   benchmarks: BenchmarkResult[]
@@ -43,34 +43,22 @@ function allocBand(allocs: number): string {
  */
 export default function Bottlenecks({ benchmarks, profile, projectName }: Props) {
   const [sort, setSort] = useState<SortKey>('time')
-  const med = useMemo(() => median(benchmarks.map((b) => b.time_per_op)), [benchmarks])
   const hasProfiles = (profile?.packages?.length ?? 0) > 0
 
   const rows = useMemo(() => {
-    const list = benchmarks.map((b) => {
-      const pkg = profileFor(b, profile)
-      const callees = calleesFor(b, pkg, projectName)
-      return { b, pkg, callees, diagnosis: diagnose(b, callees, med) }
-    })
+    const list = analyzeBenchmarks(benchmarks, profile, projectName)
     const cmp = {
-      time: (x: typeof list[0], y: typeof list[0]) => y.b.time_per_op - x.b.time_per_op,
-      allocs: (x: typeof list[0], y: typeof list[0]) => y.b.allocs_per_op - x.b.allocs_per_op,
-      bytes: (x: typeof list[0], y: typeof list[0]) => y.b.bytes_per_op - x.b.bytes_per_op,
-      name: (x: typeof list[0], y: typeof list[0]) => x.b.name.localeCompare(y.b.name),
+      time: (x: BenchAnalysis, y: BenchAnalysis) => y.b.time_per_op - x.b.time_per_op,
+      allocs: (x: BenchAnalysis, y: BenchAnalysis) => y.b.allocs_per_op - x.b.allocs_per_op,
+      bytes: (x: BenchAnalysis, y: BenchAnalysis) => y.b.bytes_per_op - x.b.bytes_per_op,
+      name: (x: BenchAnalysis, y: BenchAnalysis) => x.b.name.localeCompare(y.b.name),
     }[sort]
     return list.sort(cmp)
-  }, [benchmarks, profile, projectName, sort, med])
+  }, [benchmarks, profile, projectName, sort])
 
   // Log scale so a 7 ns and a 2.7 ms benchmark both get a visible bar.
   const maxLog = Math.log10(Math.max(10, ...benchmarks.map((b) => b.time_per_op)))
   const widthOf = (ns: number) => `${Math.max(2, (Math.log10(Math.max(1, ns)) / maxLog) * 100)}%`
-
-  // Packages with more than one benchmark share a profile, so their callees are package-wide.
-  const perPackage = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const r of rows) if (r.pkg) m.set(r.pkg.package, (m.get(r.pkg.package) ?? 0) + 1)
-    return m
-  }, [rows])
 
   return (
     <div className="card overflow-hidden">
@@ -107,7 +95,7 @@ export default function Bottlenecks({ benchmarks, profile, projectName }: Props)
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {rows.map(({ b, pkg, callees, diagnosis }) => (
+            {rows.map(({ b, pkg, callees, diagnosis, share, siblings }) => (
               <tr key={b.name} className="align-middle hover:bg-subtle/40">
                 <td className="px-4 py-2 min-w-0">
                   <p className="font-mono text-[13px] font-medium truncate" title={b.name}>{benchShortName(b.name)}</p>
@@ -125,12 +113,16 @@ export default function Bottlenecks({ benchmarks, profile, projectName }: Props)
                 </td>
                 <td className="px-4 py-2">
                   {callees.length === 0 ? (
-                    <span className="text-xs text-fg-subtle">{pkg ? 'nothing outside the runtime' : 'no profile for this package'}</span>
+                    <span className="text-xs text-fg-subtle">
+                      {!pkg ? 'no profile for this package' : share.cpu === 0 && share.mem === 0 ? 'no samples: the benchmark spent its time off the CPU' : 'nothing outside the runtime'}
+                    </span>
                   ) : (
                     <ul className="space-y-0.5">
                       {callees.map((c) => <CalleeRow key={c.kind + c.fn} c={c} />)}
-                      {pkg && (perPackage.get(pkg.package) ?? 0) > 1 && (
-                        <li className="text-[11px] text-fg-subtle">package-wide: {perPackage.get(pkg.package)} benchmarks share this profile</li>
+                      {siblings > 0 && (share.cpu > 0 || share.mem > 0) && (
+                        <li className="text-[11px] text-fg-subtle">
+                          this benchmark is {share.cpu.toFixed(0)}% of the package's CPU and {share.mem.toFixed(0)}% of its memory profile ({siblings + 1} benchmarks share it)
+                        </li>
                       )}
                     </ul>
                   )}
@@ -151,7 +143,7 @@ export default function Bottlenecks({ benchmarks, profile, projectName }: Props)
 function CalleeRow({ c }: { c: Callee }) {
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_2.75rem_3.5rem] items-center gap-2 text-xs">
-      <span className={`font-mono truncate ${c.project ? 'text-fg' : 'text-fg-muted'}`} title={c.fn}>{c.short}</span>
+      <span className={`font-mono truncate ${c.project ? 'text-fg' : 'text-fg-muted'}`} title={c.attributed ? `${c.fn} (attributed: this benchmark dominates the package profile)` : c.fn}>{c.short}{c.attributed ? '*' : ''}</span>
       <span className="font-mono tabular-nums text-right text-fg-muted">{c.pct.toFixed(1)}%</span>
       <span className="h-1.5 bg-subtle rounded-full overflow-hidden">
         <span className={`block h-full rounded-full ${c.kind === 'cpu' ? 'bg-series-1' : 'bg-violet'}`} style={{ width: `${Math.min(100, c.pct)}%` }} />

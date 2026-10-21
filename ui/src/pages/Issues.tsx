@@ -251,8 +251,8 @@ export default function Issues({ issues, onSelectIssue, onSelectFile, projectNam
           )}
         </div>
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="card overflow-x-auto">
+          <table className="w-full min-w-[52rem] text-sm">
             <thead>
               <tr className="border-b border-line bg-subtle">
                 <th className="th w-10">

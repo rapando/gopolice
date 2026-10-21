@@ -7,7 +7,7 @@ import { useThemeColors, seriesColorMap } from '../hooks/useThemeColors'
 import EmptyState from '../components/EmptyState'
 import StatTile, { type StatTone } from '../components/StatTile'
 import Bottlenecks from '../components/Bottlenecks'
-import { allocationSources, fnShort, isRuntimeFrame, median } from '../lib/perf'
+import { allocationSources, benchShortName, fnShort, isRuntimeFrame, median } from '../lib/perf'
 
 // Chart fills come from the fixed categorical series order; label text on a
 // fill picks near-black or white, whichever contrasts more with that fill.
@@ -133,8 +133,7 @@ function extractFnShort(fn: string): string {
 }
 
 function extractShortName(full: string): string {
-  const m = full.match(/Benchmark([A-Z][a-z0-9]+|[A-Z]+)/)
-  return m ? m[1] : full.length > 20 ? full.slice(0, 18) + '..' : full
+  return benchShortName(full)
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +154,7 @@ function ChartCard({ title, caption, children }: { title: string; caption?: stri
   return (
     <div className="bg-surface border border-line rounded-lg overflow-hidden">
       <div className="px-4 pt-3 pb-2 border-b border-line">
-        <h4 className="text-xs font-semibold text-fg-muted uppercase tracking-wide">{title}</h4>
+        <h4 className="text-sm font-medium text-fg-muted">{title}</h4>
         {caption && <p className="text-xs text-fg-subtle mt-0.5">{caption}</p>}
       </div>
       <div className="relative p-3">{children}</div>
@@ -278,7 +277,7 @@ function ProfileTable({ entries, maxFlat, unit }: { entries: ProfileEntry[] | nu
     <div className="overflow-x-auto bg-surface border border-line rounded-lg">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-line text-left text-xs text-fg-muted uppercase tracking-wide">
+          <tr className="border-b border-line text-left text-xs font-medium text-fg-muted">
             <th className="py-3 px-4 font-medium">Function</th>
             <th className="py-3 px-4 font-medium text-right">Self ({unit})</th>
             <th className="py-3 px-4 font-medium text-right">Self %</th>
@@ -502,14 +501,14 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
           {activeEntries && activeEntries.length > 0 ? (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <ChartCard
-                title={`${profileTab === 'cpu' ? 'CPU' : 'Memory'} Hotspots`}
+                title={`${profileTab === 'cpu' ? 'CPU' : 'Memory'} hotspots`}
                 caption="Each tile is a function; area = self %, color groups by package. Larger = hotter."
               >
                 <ProfileTreemap entries={activeEntries} />
               </ChartCard>
               <div>
-                <h4 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-2">
-                  Top Functions ({profileTab === 'cpu' ? 'self CPU' : 'self memory'})
+                <h4 className="text-sm font-medium text-fg-muted mb-2">
+                  Top functions ({profileTab === 'cpu' ? 'self CPU' : 'self memory'})
                 </h4>
                 <ProfileTable entries={activeEntries} maxFlat={profileMaxFlat} unit={profileTab === 'cpu' ? 's' : 'MB'} />
               </div>

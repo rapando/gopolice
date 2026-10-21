@@ -38,7 +38,9 @@ export function classifyModules(edges: DepEdge[], deps: Dependency[] | null | un
     if (p.path === 'toolchain') return 'toolchain'
     const segs = segsOf(p.path)
     let out = p.path
-    for (let k = 1; k <= segs.length; k++) {
+    // "v3" says nothing on its own; a major-version segment needs its parent.
+    const minSegs = /^v\d+$/.test(segs[segs.length - 1]) ? 2 : 1
+    for (let k = minSegs; k <= segs.length; k++) {
       const suffix = segs.slice(-k).join('/')
       const clash = parsed.some((q) => q.path !== p.path && segsOf(q.path).slice(-k).join('/') === suffix)
       if (!clash) { out = suffix; break }

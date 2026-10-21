@@ -43,43 +43,12 @@ export function profileFor(b: BenchmarkResult, profile: ProfileData | null): Pac
 export interface Callee {
   fn: string
   short: string
-  /** Share of the package profile, cumulative for CPU, flat for memory. */
+  /** Share of the package profile: cumulative for CPU, flat for memory. */
   pct: number
   kind: 'cpu' | 'mem'
   project: boolean
-}
-
-/** Frames that are the benchmark harness for this (or any) benchmark. */
-function isBenchFrame(fn: string): boolean {
-  return /\.Benchmark[A-Z_]/.test(fn)
-}
-
-/**
- * Where a benchmark's time and memory go: the project function it exercises
- * (if its name matches) and the heaviest non-runtime callee by share.
- * Profiles are per package, so for packages with several benchmarks the
- * callees are the package's heaviest, which the UI labels as such.
- */
-export function calleesFor(b: BenchmarkResult, pkg: PackageProfile | null, project?: string): Callee[] {
-  if (!pkg) return []
-  const short = benchShortName(b.name).toLowerCase()
-  const out: Callee[] = []
-  const pick = (entries: ProfileEntry[] | null | undefined, kind: 'cpu' | 'mem', pctOf: (e: ProfileEntry) => number) => {
-    const usable = (entries ?? []).filter((e) => !isRuntimeFrame(e.function) && !isBenchFrame(e.function) && pctOf(e) > 0)
-    const own = usable
-      .filter((e) => isProjectFrame(e.function, project) && fnShort(e.function).toLowerCase().includes(short))
-      .sort((x, y) => pctOf(y) - pctOf(x))[0]
-    const top = usable
-      .filter((e) => e !== own)
-      .sort((x, y) => pctOf(y) - pctOf(x))[0]
-    for (const e of [top, own]) {
-      if (e) out.push({ fn: e.function, short: fnShort(e.function), pct: pctOf(e), kind, project: isProjectFrame(e.function, project) })
-    }
-  }
-  pick(pkg.cpu, 'cpu', (e) => e.cum_pct)
-  pick(pkg.mem, 'mem', (e) => e.flat_pct)
-  // Most informative first: the heaviest external callee, then the function under test.
-  return out.sort((x, y) => y.pct - x.pct).slice(0, 3)
+  /** True when the frame was attributed to this benchmark because it dominates the package profile. */
+  attributed: boolean
 }
 
 export type DiagnosisKind = 'io' | 'alloc-heavy' | 'error-allocs' | 'buffer' | 'overhead' | 'library' | 'moderate' | 'fine'
@@ -91,37 +60,119 @@ export interface Diagnosis {
   tone: 'danger' | 'warning' | 'info' | 'muted' | 'success'
 }
 
-/** A first reading of the numbers. Thresholds are deliberately simple and stated in the hint. */
-export function diagnose(b: BenchmarkResult, callees: Callee[], median: number): Diagnosis {
-  const topCpu = callees.find((c) => c.kind === 'cpu')
-  const topMem = callees.find((c) => c.kind === 'mem')
-  const mem = topMem?.fn ?? ''
+export interface BenchAnalysis {
+  b: BenchmarkResult
+  pkg: PackageProfile | null
+  /** This benchmark's share of its package profile, from its own Benchmark frame. */
+  share: { cpu: number; mem: number }
+  callees: Callee[]
+  diagnosis: Diagnosis
+  /** Other benchmarks that ran in the same package. */
+  siblings: number
+}
+
+function isBenchFrame(fn: string): boolean {
+  return /\.Benchmark[A-Z_]/.test(fn)
+}
+
+function benchFrame(entries: ProfileEntry[] | null | undefined, short: string): ProfileEntry | undefined {
+  return (entries ?? []).find((e) => isBenchFrame(e.function) && fnShort(e.function).split('.Benchmark')[1]?.replace(/-\d+$/, '') === short)
+}
+
+/**
+ * Attributes profile frames to benchmarks. go test profiles a package, not a
+ * benchmark, so for packages with several benchmarks only three things are
+ * safe to say: each benchmark's own share (its Benchmark frame's cumulative
+ * share), the project function it exercises (matched by name or by share),
+ * and, when one benchmark accounts for most of a profile, that the package's
+ * heaviest callee belongs to it.
+ */
+export function analyzeBenchmarks(benchmarks: BenchmarkResult[], profile: ProfileData | null, project?: string): BenchAnalysis[] {
+  const med = median(benchmarks.map((b) => b.time_per_op))
+  const pkgOf = new Map<BenchmarkResult, PackageProfile | null>(benchmarks.map((b) => [b, profileFor(b, profile)]))
+  const perPkg = new Map<string, BenchmarkResult[]>()
+  for (const [b, p] of pkgOf) if (p) perPkg.set(p.package, [...(perPkg.get(p.package) ?? []), b])
+
+  const shares = new Map<BenchmarkResult, { cpu: number; mem: number }>()
+  for (const [b, p] of pkgOf) {
+    const short = benchShortName(b.name)
+    shares.set(b, { cpu: benchFrame(p?.cpu, short)?.cum_pct ?? 0, mem: benchFrame(p?.mem, short)?.cum_pct ?? 0 })
+  }
+
+  const usable = (entries: ProfileEntry[] | null | undefined, pctOf: (e: ProfileEntry) => number) =>
+    (entries ?? []).filter((e) => !isRuntimeFrame(e.function) && !isBenchFrame(e.function) && pctOf(e) > 0)
+
+  return benchmarks.map((b) => {
+    const pkg = pkgOf.get(b) ?? null
+    const share = shares.get(b)!
+    const siblings = pkg ? (perPkg.get(pkg.package)?.length ?? 1) - 1 : 0
+    const short = benchShortName(b.name).toLowerCase()
+    const callees: Callee[] = []
+
+    for (const kind of ['cpu', 'mem'] as const) {
+      const pctOf = kind === 'cpu' ? (e: ProfileEntry) => e.cum_pct : (e: ProfileEntry) => e.flat_pct
+      const entries = usable(kind === 'cpu' ? pkg?.cpu : pkg?.mem, pctOf)
+      const own = entries
+        .filter((e) => isProjectFrame(e.function, project) && fnShort(e.function).toLowerCase().includes(short))
+        .sort((x, y) => pctOf(y) - pctOf(x))[0]
+      if (own) callees.push({ fn: own.function, short: fnShort(own.function), pct: pctOf(own), kind, project: true, attributed: false })
+
+      // The heaviest frame outside the project. With one benchmark in the
+      // package it is this benchmark's; with several, only if this benchmark
+      // dominates that profile.
+      const external = entries.filter((e) => !isProjectFrame(e.function, project)).sort((x, y) => pctOf(y) - pctOf(x))[0]
+      if (external) {
+        const mine = siblings === 0 || dominates(b, kind, perPkg.get(pkg!.package) ?? [], shares)
+        if (mine) callees.push({ fn: external.function, short: fnShort(external.function), pct: pctOf(external), kind, project: false, attributed: siblings > 0 })
+      }
+    }
+    callees.sort((x, y) => y.pct - x.pct)
+
+    return { b, pkg, share, callees: callees.slice(0, 3), diagnosis: diagnose(b, share, callees, med, !!pkg), siblings }
+  })
+}
+
+/** Whether this benchmark accounts for at least half of its package's profile of that kind. */
+function dominates(b: BenchmarkResult, kind: 'cpu' | 'mem', group: BenchmarkResult[], shares: Map<BenchmarkResult, { cpu: number; mem: number }>): boolean {
+  const mine = shares.get(b)?.[kind] ?? 0
+  const total = group.reduce((s, x) => s + (shares.get(x)?.[kind] ?? 0), 0)
+  return mine > 0 && total > 0 && mine / total >= 0.5
+}
+
+/** A first reading of the numbers. The thresholds are simple and stated in the hints. */
+export function diagnose(b: BenchmarkResult, share: { cpu: number; mem: number }, callees: Callee[], med: number, profiled: boolean): Diagnosis {
+  const topCpu = callees.find((c) => c.kind === 'cpu' && !c.project)
+  const topMem = callees.find((c) => c.kind === 'mem' && !c.project)
+  const own = callees.find((c) => c.project)
   const cpu = topCpu?.fn ?? ''
-  if (/os\.(RemoveAll|removeAll|MkdirTemp|CreateTemp)|testing\.\(\*B\)\.TempDir/.test(cpu) || /os\.(RemoveAll|MkdirTemp)/.test(mem)) {
-    return { kind: 'overhead', label: 'Benchmark overhead', hint: `${fnShort(cpu || mem)} is the test's own setup or cleanup, not the product.`, tone: 'muted' }
+  const mem = topMem?.fn ?? ''
+
+  // Slow with nothing to show for it on the CPU: the time is spent waiting.
+  if (b.time_per_op >= 1e5 && b.allocs_per_op < 10 && (!profiled || share.cpu < 1) && b.time_per_op > med * 10) {
+    return { kind: 'io', label: 'Waiting, not computing', hint: `${(b.time_per_op / 1e6).toFixed(2)} ms with ${b.allocs_per_op} allocs and ${profiled ? 'no CPU samples' : 'no profile'}: the time goes to I/O or syscalls. Cache or batch the work.`, tone: 'danger' }
+  }
+  if (/os\.(RemoveAll|removeAll|MkdirTemp|CreateTemp)|testing\.\(\*B\)\.TempDir/.test(cpu)) {
+    return { kind: 'overhead', label: 'Benchmark overhead', hint: `${topCpu!.pct.toFixed(0)}% of CPU is ${fnShort(cpu)}, the test's own setup or cleanup, not the product.`, tone: 'muted' }
   }
   if (b.allocs_per_op === 0) {
-    return { kind: 'fine', label: 'Allocation-free', hint: topCpu ? `Time goes to ${topCpu.short}.` : 'No heap allocations per op.', tone: 'success' }
+    return { kind: 'fine', label: 'Allocation-free', hint: own ? `Time goes to ${own.short}${topCpu ? ` and ${topCpu.short}` : ''}.` : 'No heap allocations per op.', tone: 'success' }
   }
-  if (/newParseError|errors\.New|fmt\.Errorf|\.Error\b/.test(mem)) {
-    return { kind: 'error-allocs', label: 'Error-path allocs', hint: `${topMem!.pct.toFixed(0)}% of its memory is building ${fnShort(mem)}; an error is created on the normal path.`, tone: 'warning' }
+  if (/newParseError|errors\.New|fmt\.Errorf/.test(mem)) {
+    return { kind: 'error-allocs', label: 'Error-path allocs', hint: `${topMem!.pct.toFixed(0)}% of its package's memory is ${fnShort(mem)}: an error is built on the normal path, probably a failing parse attempt before the one that succeeds.`, tone: 'warning' }
   }
   if (/bufio\.|bytes\.\(\*Buffer\)|strings\.\(\*Builder\)|makeslice|growslice/.test(mem)) {
-    return { kind: 'buffer', label: 'Buffer per call', hint: `${fnShort(mem)} allocates a fresh buffer each op; size or reuse it.`, tone: 'info' }
+    return { kind: 'buffer', label: 'Buffer per call', hint: `${topMem!.pct.toFixed(0)}% of its package's memory is ${fnShort(mem)}: a fresh buffer each op. Size it up front or reuse it.`, tone: 'info' }
   }
   if (b.allocs_per_op >= 100) {
-    return { kind: 'alloc-heavy', label: 'Allocation-heavy', hint: `${b.allocs_per_op} allocs/op${topMem ? `, ${topMem.pct.toFixed(0)}% from ${topMem.short}` : ''}.`, tone: 'warning' }
+    return { kind: 'alloc-heavy', label: 'Allocation-heavy', hint: `${b.allocs_per_op} allocs/op${own ? `, ${own.pct.toFixed(0)}% of its package's memory in ${own.short}` : ''}.`, tone: 'warning' }
   }
-  if (median > 0 && b.time_per_op > Math.max(1e6, median * 50) && b.allocs_per_op < 10) {
-    return { kind: 'io', label: 'Slow, few allocs', hint: `${b.allocs_per_op} allocs for ${(b.time_per_op / 1e6).toFixed(2)} ms: the time is waiting on I/O or syscalls, not the CPU.`, tone: 'danger' }
-  }
-  if (topMem && !topMem.project && topMem.pct >= 50) {
-    return { kind: 'library', label: 'Library', hint: `${topMem.pct.toFixed(0)}% of its memory is inside ${topMem.short}; little to change here.`, tone: 'muted' }
+  if (topMem && topMem.pct >= 50) {
+    return { kind: 'library', label: 'Library', hint: `${topMem.pct.toFixed(0)}% of its package's memory is inside ${topMem.short}; little to change in your code.`, tone: 'muted' }
   }
   if (b.allocs_per_op >= 20) {
-    return { kind: 'moderate', label: 'Some allocations', hint: `${b.allocs_per_op} allocs/op${topMem ? `, mostly ${topMem.short}` : ''}.`, tone: 'info' }
+    return { kind: 'moderate', label: 'Some allocations', hint: `${b.allocs_per_op} allocs/op${own ? `, in ${own.short}` : ''}.`, tone: 'info' }
   }
-  return { kind: 'fine', label: 'Fine', hint: topCpu ? `Time goes to ${topCpu.short}.` : 'Nothing stands out.', tone: 'success' }
+  return { kind: 'fine', label: 'Fine', hint: own ? `Time goes to ${own.short}.` : 'Nothing stands out.', tone: 'success' }
 }
 
 /** Project functions ranked by how much of their package's memory profile they allocate themselves. */
@@ -129,7 +180,7 @@ export function allocationSources(profile: ProfileData | null, project?: string)
   const out: { fn: string; short: string; pct: number; pkg: string }[] = []
   for (const p of profile?.packages ?? []) {
     for (const e of p.mem ?? []) {
-      if (isProjectFrame(e.function, project) && !isBenchFrame(e.function) && e.flat_pct > 0) {
+      if (isProjectFrame(e.function, project) && !isBenchFrame(e.function) && e.flat_pct >= 0.1) {
         out.push({ fn: e.function, short: fnShort(e.function), pct: e.flat_pct, pkg: p.package })
       }
     }
