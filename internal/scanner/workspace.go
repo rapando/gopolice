@@ -192,6 +192,7 @@ func RunWorkspaceScan(ctx context.Context, cfg *config.Config, progress chan<- P
 		if result.FileStats != nil {
 			combined.FileStats = append(combined.FileStats, result.FileStats...)
 		}
+		combined.Tools = model.MergeToolStatus(combined.Tools, result.Tools)
 		combined.TotalFiles += result.TotalFiles
 		combined.GoFiles += result.GoFiles
 		combined.TotalLines += result.TotalLines

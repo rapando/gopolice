@@ -97,6 +97,8 @@ func (p *Pipeline) Run(ctx context.Context, cfg *config.Config, progress chan<- 
 			result.DepGraph = data
 		case *model.GitInfo:
 			result.GitInfo = data
+		case []model.ToolStatus:
+			result.Tools = model.MergeToolStatus(result.Tools, data)
 		case *model.ScanResult:
 			if data.FileStats != nil {
 				result.FileStats = data.FileStats

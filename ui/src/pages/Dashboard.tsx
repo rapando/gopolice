@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react'
-import { ArrowRight, CircleCheck, CircleX, FlaskConical, GitBranch, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { ArrowRight, CircleCheck, CircleX, FlaskConical, GitBranch, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
 import { ScanResult, type Issue, type TestPackage } from '../api/client'
 import { useThemeColors } from '../hooks/useThemeColors'
 import { SeverityIcon } from '../components/Severity'
@@ -10,6 +10,7 @@ import { routeToHash, type Page } from '../lib/router'
 import type { ScanState } from '../lib/scan'
 import { gradeDetails } from '../lib/grade'
 import { compareBySeverityThenValue, issueMeasure, issueSubject } from '../lib/issues'
+import { securitySummary } from '../lib/security'
 
 interface Props {
   result: ScanResult | null
@@ -139,7 +140,7 @@ export default function Dashboard({ result, scan, scanning, readingResults, onSc
     )
   }
 
-  const security = result.issues.filter((i) => i.category === 'security')
+  const security = securitySummary(result)
   const testResult = result.test_results
   const total = testResult?.total
   const passRate = total && total.total > 0 ? (total.passed / total.total) * 100 : null
@@ -284,14 +285,18 @@ export default function Dashboard({ result, scan, scanning, readingResults, onSc
       {/* One-line summaries */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <LineCard to="security" title="Security">
-          {security.length === 0 ? (
-            <p className="inline-flex items-center gap-2 text-success"><ShieldCheck className="w-4 h-4" /> No security findings</p>
+          {security.state === 'findings' ? (
+            <p className="inline-flex items-center gap-2 text-danger font-medium"><ShieldAlert className="w-4 h-4" /> {security.findings} finding{security.findings === 1 ? '' : 's'}</p>
+          ) : security.state === 'clear' ? (
+            <p className="inline-flex items-center gap-2 text-success"><ShieldCheck className="w-4 h-4" /> All clear</p>
+          ) : security.state === 'partial' ? (
+            <p className="inline-flex items-center gap-2 text-warning font-medium"><ShieldQuestion className="w-4 h-4" /> Partially checked</p>
           ) : (
-            <p className="inline-flex items-center gap-2 text-danger font-medium"><ShieldAlert className="w-4 h-4" /> {security.length} finding{security.length === 1 ? '' : 's'}</p>
+            <p className="inline-flex items-center gap-2 text-fg-muted"><ShieldQuestion className="w-4 h-4" /> No findings recorded</p>
           )}
-          {result.deps && (
-            <p className="text-xs text-fg-subtle mt-1">{result.deps.length} dependencies · {result.deps.filter((d) => d.indirect).length} indirect</p>
-          )}
+          <p className="text-xs text-fg-subtle mt-1 truncate">
+            {security.notes.length > 0 ? security.notes.join(' · ') : result.deps ? `${result.deps.length} dependencies · ${result.deps.filter((d) => d.indirect).length} indirect` : ''}
+          </p>
         </LineCard>
 
         <LineCard to="performance" title="Benchmarks">

@@ -46,13 +46,17 @@ func (s *SecurityScanner) Run(ctx context.Context, cfg *config.Config, progress 
 	t := newTracker(progress, s.Name())
 	t.started("Running security checks")
 	var allIssues []model.Issue
+	gosec := model.ToolStatus{Scanner: s.Name(), Tool: "gosec", Status: model.ToolMissing, Install: "go install github.com/securego/gosec/v2/cmd/gosec@latest"}
+	govuln := model.ToolStatus{Scanner: s.Name(), Tool: "govulncheck", Status: model.ToolMissing, Install: "go install golang.org/x/vuln/cmd/govulncheck@latest"}
 
 	if hasTool("gosec") {
 		t.step(1, 2, "tools", "Running gosec (static analysis)", "gosec ./...")
 		issues, err := s.runGosec(ctx, projectDir)
 		if err != nil {
+			gosec.Status, gosec.Error = model.ToolFailed, err.Error()
 			t.running(fmt.Sprintf("gosec: %v", err))
 		} else {
+			gosec.Status, gosec.Findings = model.ToolRan, len(issues)
 			allIssues = append(allIssues, issues...)
 			t.running(fmt.Sprintf("gosec found %d issues", len(issues)))
 		}
@@ -64,8 +68,10 @@ func (s *SecurityScanner) Run(ctx context.Context, cfg *config.Config, progress 
 		t.step(2, 2, "tools", "Running govulncheck (known vulnerabilities)", "govulncheck ./...")
 		issues, err := s.runGovulncheck(ctx, projectDir)
 		if err != nil {
+			govuln.Status, govuln.Error = model.ToolFailed, err.Error()
 			t.running(fmt.Sprintf("govulncheck: %v", err))
 		} else {
+			govuln.Status, govuln.Findings = model.ToolRan, len(issues)
 			allIssues = append(allIssues, issues...)
 			t.running(fmt.Sprintf("govulncheck found %d vulnerabilities", len(issues)))
 		}
@@ -74,7 +80,7 @@ func (s *SecurityScanner) Run(ctx context.Context, cfg *config.Config, progress 
 	}
 
 	t.completedf("Found %d security issues", len(allIssues))
-	return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: allIssues}, nil
+	return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: allIssues, Data: []model.ToolStatus{gosec, govuln}}, nil
 }
 
 func (s *SecurityScanner) runGosec(ctx context.Context, projectDir string) ([]model.Issue, error) {

@@ -219,7 +219,7 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
       ) : page === 'depgraph' ? (
         <DepGraph depGraph={result?.dep_graph ?? null} onScan={handleScan} scanning={scanning} />
       ) : page === 'security' ? (
-        <Security issues={result?.issues ?? []} onSelectIssue={goIssue} onScan={handleScan} scanning={scanning} />
+        <Security issues={result?.issues ?? []} tools={result?.tools} onSelectIssue={goIssue} onScan={handleScan} scanning={scanning} />
       ) : page === 'git' ? (
         <GitStats gitInfo={result?.git_info ?? null} onScan={handleScan} scanning={scanning} />
       ) : page === 'history' ? (

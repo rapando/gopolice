@@ -152,6 +152,51 @@ type ScanResult struct {
 	GoFiles     int               `json:"go_files"`
 	TotalLines  int               `json:"total_lines"`
 	Modules     []string          `json:"modules,omitempty"`
+	// Tools records whether each external tool a scanner relies on ran, so
+	// "no issues" can be told apart from "nothing was checked".
+	Tools []ToolStatus `json:"tools,omitempty"`
+}
+
+// Tool status values.
+const (
+	ToolRan     = "ran"
+	ToolMissing = "missing"
+	ToolFailed  = "failed"
+)
+
+// ToolStatus is one external tool's outcome in a scan.
+type ToolStatus struct {
+	Scanner  string `json:"scanner"`
+	Tool     string `json:"tool"`
+	Status   string `json:"status"`
+	Findings int    `json:"findings"`
+	Error    string `json:"error,omitempty"`
+	// Install is the command that would make a missing tool available.
+	Install string `json:"install,omitempty"`
+}
+
+// MergeToolStatus combines per-module tool outcomes into one entry per tool:
+// findings add up, and a failure or a missing tool anywhere wins over ran.
+func MergeToolStatus(lists ...[]ToolStatus) []ToolStatus {
+	var out []ToolStatus
+	index := map[string]int{}
+	rank := map[string]int{ToolRan: 0, ToolFailed: 1, ToolMissing: 2}
+	for _, list := range lists {
+		for _, t := range list {
+			i, ok := index[t.Tool]
+			if !ok {
+				index[t.Tool] = len(out)
+				out = append(out, t)
+				continue
+			}
+			out[i].Findings += t.Findings
+			if rank[t.Status] > rank[out[i].Status] {
+				out[i].Status = t.Status
+				out[i].Error = t.Error
+			}
+		}
+	}
+	return out
 }
 
 type BenchmarkResult struct {

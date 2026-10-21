@@ -42,6 +42,17 @@ export interface ScanResult {
   go_files: number
   total_lines: number
   modules: string[] | null
+  /** Whether each external tool ran; absent in results from older scans. */
+  tools?: ToolStatus[] | null
+}
+
+export interface ToolStatus {
+  scanner: string
+  tool: string
+  status: 'ran' | 'missing' | 'failed'
+  findings: number
+  error?: string
+  install?: string
 }
 
 export interface BenchmarkResult {
