@@ -223,7 +223,7 @@ function ProjectApp({ projectId, service }: { projectId?: string; service?: { us
       ) : page === 'git' ? (
         <GitStats gitInfo={result?.git_info ?? null} onScan={handleScan} scanning={scanning} />
       ) : page === 'history' ? (
-        <History onLoadResult={handleLoadResult} />
+        <History onLoadResult={handleLoadResult} onScan={handleScan} />
       ) : page === 'config' ? (
         <ConfigPage />
       ) : null}

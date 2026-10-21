@@ -3,14 +3,45 @@ import { HistoryEntry, DiffResult, ScanResult, getHistoryList, getHistoryEntry, 
 import { severityBadgeClass, categoryTextClass } from '../lib/severity'
 import Spinner from '../components/Spinner'
 import StatTile from '../components/StatTile'
+import Trends from '../components/Trends'
+import { timeAgo } from './GitStats'
 
 interface Props {
   onLoadResult?: (result: ScanResult, label: string) => void
+  onScan?: () => void
+}
+
+const GRADE_CHIP: Record<string, string> = {
+  A: 'bg-success-soft text-success', B: 'bg-success-soft text-success', C: 'bg-warning-soft text-warning',
+  D: 'bg-orange-soft text-orange', F: 'bg-danger-soft text-danger',
+}
+
+function GradeChip({ grade }: { grade?: string }) {
+  if (!grade) return <span className="w-9 shrink-0" />
+  return <span className={`w-9 shrink-0 text-center text-xs font-bold rounded px-1.5 py-0.5 ${GRADE_CHIP[grade] ?? 'bg-subtle text-fg-muted'}`}>{grade}</span>
+}
+
+/** "18 Oct 2026, 19:48" plus how long ago. */
+function scanDate(iso: string): { text: string; ago: string } {
+  const d = new Date(iso)
+  return {
+    text: d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+    ago: timeAgo(iso),
+  }
+}
+
+/** Change since the previous saved scan, signed, or nothing for the first scan. */
+function delta(curr: number | undefined, prev: number | undefined, lowerIsBetter: boolean): { text: string; tone: 'success' | 'danger' | 'muted' } | null {
+  if (curr === undefined || prev === undefined) return null
+  const d = curr - prev
+  if (d === 0) return { text: 'no change since last scan', tone: 'muted' }
+  const good = lowerIsBetter ? d < 0 : d > 0
+  return { text: `${d > 0 ? '+' : ''}${d} since last scan`, tone: good ? 'success' : 'danger' }
 }
 
 const PAGE_SIZE = 15
 
-export default function History({ onLoadResult }: Props) {
+export default function History({ onLoadResult, onScan }: Props) {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
@@ -101,11 +132,14 @@ export default function History({ onLoadResult }: Props) {
       ) : (
         <>
           <div className="grid grid-cols-4 gap-4 mb-5">
-            <StatTile label="Saved scans" value={entries.length} />
-            <StatTile label="Latest issues" value={entries[0]?.total_issues ?? 0} />
-            <StatTile label="Latest tests" value={entries[0]?.total_tests ?? 0} />
-            <StatTile label="Project" value={entries[0]?.project_name ?? '-'} dense title={entries[0]?.project_name} />
+            <StatTile label="Saved scans" value={entries.length} sub={entries.length === 1 ? 'one scan so far' : `latest ${timeAgo(entries[0].timestamp)}`} />
+            <DeltaTile label="Latest issues" value={entries[0]?.total_issues ?? 0} change={delta(entries[0]?.total_issues, entries[1]?.total_issues, true)} />
+            <DeltaTile label="Latest tests" value={entries[0]?.total_tests ?? 0} change={delta(entries[0]?.total_tests, entries[1]?.total_tests, false)} />
+            <StatTile label="Latest grade" value={<GradeChip grade={entries[0]?.grade} />} sub={entries[1]?.grade && entries[1].grade !== entries[0]?.grade ? `was ${entries[1].grade} last scan` : undefined} />
           </div>
+
+          <Trends onScan={onScan} />
+          <div className="mb-5" />
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -157,7 +191,7 @@ export default function History({ onLoadResult }: Props) {
             <div className="flex items-center gap-3 px-5 py-2.5 bg-subtle border-b border-line text-xs font-medium text-fg-muted">
               <span className="w-4 shrink-0" />
               <span className="w-9 shrink-0" />
-              <span className="w-36 shrink-0">Date</span>
+              <span className="w-44 shrink-0">Date</span>
               <span className="w-16 shrink-0">Issues</span>
               <span className="w-16 shrink-0">Tests</span>
               <span className="flex-1" />
@@ -184,16 +218,11 @@ export default function History({ onLoadResult }: Props) {
                         onClick={(ev) => ev.stopPropagation()}
                         className="shrink-0"
                       />
-                      <span className={`w-9 shrink-0 text-center text-xs font-bold rounded ${
-                        e.grade === 'A' ? 'text-success' :
-                        e.grade === 'B' ? 'text-success' :
-                        e.grade === 'C' ? 'text-warning' :
-                        e.grade === 'D' ? 'text-orange' :
-                        e.grade === 'F' ? 'text-danger' : ''
-                      }`}>{e.grade || '-'}</span>
+                      <GradeChip grade={e.grade} />
                       <button className="flex-1 flex items-center gap-3 text-left" onClick={() => viewEntry(e.id)}>
-                        <span className="text-xs text-fg-subtle font-mono w-36 shrink-0">
-                          {new Date(e.timestamp).toLocaleString()}
+                        <span className="w-44 shrink-0 text-xs">
+                          <span className="block text-fg tabular-nums">{scanDate(e.timestamp).text}</span>
+                          <span className="block text-fg-subtle">{scanDate(e.timestamp).ago}</span>
                         </span>
                         <span className="text-sm text-fg font-medium w-16 shrink-0">{e.total_issues}</span>
                         <span className="text-xs text-fg-muted w-16 shrink-0">{e.total_tests}</span>
@@ -472,4 +501,9 @@ export default function History({ onLoadResult }: Props) {
       )}
     </div>
   )
+}
+
+function DeltaTile({ label, value, change }: { label: string; value: number; change: ReturnType<typeof delta> }) {
+  const tone = change?.tone === 'success' ? 'text-success' : change?.tone === 'danger' ? 'text-danger' : 'text-fg-subtle'
+  return <StatTile label={label} value={value} sub={change ? <span className={tone}>{change.text}</span> : 'first saved scan'} />
 }

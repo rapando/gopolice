@@ -315,7 +315,7 @@ export default function Dashboard({ result, scan, scanning, readingResults, onSc
         </LineCard>
       </div>
 
-      <Trends />
+      <Trends onScan={onScan} />
     </div>
   )
 }

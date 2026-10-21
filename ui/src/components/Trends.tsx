@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { getTrends, TrendPoint, TrendsData } from '../api/client'
 import { useThemeColors } from '../hooks/useThemeColors'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
+import { Play, TrendingUp } from 'lucide-react'
 
 type Range = '7d' | '30d' | '90d' | 'all'
 
@@ -27,7 +28,7 @@ function formatTS(ts: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-export default function Trends() {
+export default function Trends({ onScan }: { onScan?: () => void } = {}) {
   const colors = useThemeColors()
   const tooltipStyle = {
     contentStyle: { fontSize: 12, backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
@@ -58,12 +59,28 @@ export default function Trends() {
     )
   }
 
-  if (!data || !data.points || data.points.length < 2) {
-    return null
+  const saved = data?.points?.length ?? 0
+  if (saved < 2) {
+    return (
+      <div className="mt-8">
+        <h3 className="text-sm font-medium text-fg-muted mb-3">Trends</h3>
+        <div className="card px-6 py-8 flex flex-col items-center text-center">
+          <TrendingUp className="w-7 h-7 text-fg-subtle mb-2" aria-hidden="true" />
+          <p className="text-sm font-medium">Trends appear after two saved scans</p>
+          <p className="mt-1 text-sm text-fg-muted max-w-md">
+            {saved === 0 ? 'No scan has been saved to history yet.' : 'One scan is saved so far.'} Each scan adds a point for issues, grade, coverage and benchmark time.
+          </p>
+          {onScan && (
+            <button onClick={onScan} className="btn-primary mt-4">
+              <Play className="w-4 h-4" aria-hidden="true" /> Run scan
+            </button>
+          )}
+        </div>
+      </div>
+    )
   }
 
-  const filtered = filterPoints(data.points, range)
-  if (filtered.length < 2) return null
+  const filtered = filterPoints(data!.points, range)
 
   const issueData = filtered.map((p) => ({
     ts: formatTS(p.timestamp),
@@ -98,7 +115,7 @@ export default function Trends() {
   return (
     <div className="mt-8">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-fg uppercase tracking-wide">Trends</h3>
+        <h3 className="text-sm font-medium text-fg-muted">Trends</h3>
         <div className="flex items-center gap-1">
           {ranges.map((r) => (
             <button
@@ -117,6 +134,11 @@ export default function Trends() {
         </div>
       </div>
 
+      {filtered.length < 2 ? (
+        <div className="card px-6 py-8 text-center text-sm text-fg-muted">
+          Fewer than two scans in this range. {saved} scan{saved === 1 ? '' : 's'} saved in total; pick a wider range.
+        </div>
+      ) : (
       <div className="bg-surface border border-line rounded overflow-hidden">
         <div className="flex border-b border-line" role="tablist">
           {tabs.map((t) => (
@@ -190,6 +212,7 @@ export default function Trends() {
           )}
         </div>
       </div>
+      )}
     </div>
   )
 }
