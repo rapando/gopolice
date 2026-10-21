@@ -13,6 +13,9 @@ export interface Issue {
   solution: string
   module: string
   git_blame: BlameInfo | null
+  /** The measured number behind the issue (cyclomatic complexity), when there is one. */
+  value?: number
+  threshold?: number
 }
 
 export interface BlameInfo {
