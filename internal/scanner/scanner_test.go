@@ -114,6 +114,14 @@ ok  	github.com/example/pkg	0.500s`
 	}
 }
 
+func TestParseBenchOutput_RecordsPackage(t *testing.T) {
+	out := "goos: darwin\npkg: example.com/m/a\nBenchmarkA-8   1000   100 ns/op   8 B/op   1 allocs/op\npkg: example.com/m/b\nBenchmarkB-8   2000   50 ns/op\n"
+	rs := parseBenchOutput(out)
+	if len(rs) != 2 || rs[0].Package != "example.com/m/a" || rs[1].Package != "example.com/m/b" {
+		t.Errorf("packages not recorded: %+v", rs)
+	}
+}
+
 func TestParseTestOutput_NoTestFilesIsNotSkipped(t *testing.T) {
 	out := "=== RUN   TestA\n--- PASS: TestA (0.00s)\n=== RUN   TestB\n--- SKIP: TestB (0.00s)\nok  \tmod/a\t0.1s\n?   \tmod/b\t[no test files]\n"
 	r := parseTestOutput(out)

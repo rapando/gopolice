@@ -6,6 +6,8 @@ import PerformancePlan from '../components/PerformancePlan'
 import { useThemeColors, seriesColorMap } from '../hooks/useThemeColors'
 import EmptyState from '../components/EmptyState'
 import StatTile, { type StatTone } from '../components/StatTile'
+import Bottlenecks from '../components/Bottlenecks'
+import { allocationSources, fnShort, isRuntimeFrame, median } from '../lib/perf'
 
 // Chart fills come from the fixed categorical series order; label text on a
 // fill picks near-black or white, whichever contrasts more with that fill.
@@ -23,13 +25,6 @@ interface Props {
   onScan?: () => void
   scanning?: boolean
   projectName?: string
-}
-
-function fmtDuration(ns: number): string {
-  if (ns >= 1_000_000_000) return (ns / 1_000_000_000).toFixed(3) + ' s'
-  if (ns >= 1_000_000) return (ns / 1_000_000).toFixed(3) + ' ms'
-  if (ns >= 1_000) return (ns / 1_000).toFixed(2) + ' µs'
-  return ns.toFixed(0) + ' ns'
 }
 
 function fmtBytes(b: number): string {
@@ -142,11 +137,6 @@ function extractShortName(full: string): string {
   return m ? m[1] : full.length > 20 ? full.slice(0, 18) + '..' : full
 }
 
-function inferCategory(name: string): string {
-  const m = name.match(/^(Benchmark)?([A-Z][a-z]+|[A-Z]+)/)
-  return m ? m[2] : 'Other'
-}
-
 // ---------------------------------------------------------------------------
 // Shared presentational primitives
 // ---------------------------------------------------------------------------
@@ -178,268 +168,13 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string;
   return <StatTile label={label} value={value} sub={sub} tone={tone} />
 }
 
-function useTooltip<T>() {
-  return useState<{ x: number; y: number; data: T | null }>({ x: 0, y: 0, data: null })
-}
-
 // ---------------------------------------------------------------------------
 // Benchmark: horizontal diverging bar — primary view (time, colored by allocs)
 // ---------------------------------------------------------------------------
 
-function BenchmarkBars({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
-  const colors = useThemeColors()
-  const svgRef = useRef<SVGSVGElement>(null)
-  const [tooltip, setTooltip] = useTooltip<BenchmarkResult>()
-
-  const sorted = useMemo(() => [...benchmarks].sort((a, b) => b.time_per_op - a.time_per_op), [benchmarks])
-  const maxTime = useMemo(() => Math.max(...benchmarks.map((b) => b.time_per_op), 1), [benchmarks])
-  const maxAllocs = useMemo(() => Math.max(...benchmarks.map((b) => b.allocs_per_op), 1), [benchmarks])
-
-  useEffect(() => {
-    if (!sorted.length || !svgRef.current) return
-    const svg = d3.select(svgRef.current)
-    svg.selectAll('*').remove()
-
-    const width = svgRef.current.clientWidth
-    const rowH = 30
-    const pad = { top: 8, right: 130, bottom: 24, left: 150 }
-    const height = sorted.length * rowH + pad.top + pad.bottom
-    const innerW = width - pad.left - pad.right
-
-    svg.attr('viewBox', `0 0 ${width} ${height}`)
-
-    const xScale = d3.scaleLinear().domain([0, maxTime * 1.05]).range([0, Math.max(innerW, 1)])
-    // Color encodes allocations: green (none) -> yellow -> red (many).
-    const colorScale = d3.scaleSequentialSqrt()
-      .domain([0, Math.max(maxAllocs, 1)])
-      .interpolator(d3.interpolateRgbBasis([colors.good, colors.warn, colors.bad]))
-
-    const g = svg.append('g').attr('transform', `translate(${pad.left},${pad.top})`)
-
-    // x gridlines
-    const ticks = xScale.ticks(5)
-    g.append('g').selectAll('line').data(ticks).join('line')
-      .attr('x1', (d) => xScale(d)).attr('x2', (d) => xScale(d))
-      .attr('y1', 0).attr('y2', sorted.length * rowH)
-      .attr('stroke', colors.border).attr('stroke-opacity', 0.5)
-    g.append('g').selectAll('text').data(ticks).join('text')
-      .attr('x', (d) => xScale(d)).attr('y', sorted.length * rowH + 14)
-      .attr('text-anchor', 'middle').attr('font-size', '9px').attr('fill', colors.axis)
-      .text((d) => fmtShortNS(d as number))
-
-    sorted.forEach((b, i) => {
-      const y = i * rowH
-      const w = Math.max(xScale(b.time_per_op), 2)
-      const color = b.allocs_per_op > 0 ? colorScale(b.allocs_per_op) : colors.good
-
-      // row label (benchmark name)
-      g.append('text').attr('x', -10).attr('y', y + rowH / 2)
-        .attr('font-size', '11px').attr('fill', colors.text)
-        .attr('dominant-baseline', 'middle').attr('text-anchor', 'end')
-        .text(extractShortName(b.name))
-
-      const bar = g.append('rect')
-        .attr('x', 0).attr('y', y + 3).attr('width', w).attr('height', rowH - 10)
-        .attr('rx', 3).attr('fill', color as string).attr('opacity', 0.85)
-        .style('cursor', 'pointer')
-      bar
-        .on('mouseover', function (event: MouseEvent) {
-          d3.select(this).attr('opacity', 1)
-          const rect = svgRef.current!.getBoundingClientRect()
-          setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top - 10, data: b })
-        })
-        .on('mousemove', function (event: MouseEvent) {
-          const rect = svgRef.current!.getBoundingClientRect()
-          setTooltip((prev) => ({ ...prev, x: event.clientX - rect.left, y: event.clientY - rect.top - 10 }))
-        })
-        .on('mouseout', function () {
-          d3.select(this).attr('opacity', 0.85)
-          setTooltip({ x: 0, y: 0, data: null })
-        })
-
-      g.append('text').attr('x', w + 8).attr('y', y + rowH / 2)
-        .attr('font-size', '11px').attr('fill', colors.muted)
-        .attr('dominant-baseline', 'middle')
-        .text(`${fmtShortNS(b.time_per_op)} · ${b.allocs_per_op} alloc`)
-    })
-  }, [sorted, maxTime, maxAllocs, colors, setTooltip])
-
-  return (
-    <div className="relative">
-      <svg ref={svgRef} className="w-full" style={{ minHeight: 120 }} />
-      <BenchTooltip tooltip={tooltip} />
-    </div>
-  )
-}
-
-function BenchTooltip({ tooltip }: { tooltip: { x: number; y: number; data: BenchmarkResult | null } }) {
-  if (!tooltip.data) return null
-  const eff = allocEfficiency(tooltip.data.allocs_per_op, tooltip.data.bytes_per_op)
-  return (
-    <div role="tooltip" className="absolute z-20 pointer-events-none bg-inverse text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-relaxed max-w-xs"
-      style={{ left: Math.min(tooltip.x, window.innerWidth - 280), top: Math.max(tooltip.y, 10) }}
-    >
-      <div className="font-semibold text-sm mb-1 break-all">{tooltip.data.name}</div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-line-strong">
-        <span>Time/Op</span><span className="text-right font-mono text-success">{fmtDuration(tooltip.data.time_per_op)}</span>
-        <span>Iterations</span><span className="text-right font-mono">{tooltip.data.iterations.toLocaleString()}</span>
-        <span>Allocs/Op</span><span className="text-right font-mono">{tooltip.data.allocs_per_op}</span>
-        <span>Bytes/Op</span><span className="text-right font-mono">{fmtBytes(tooltip.data.bytes_per_op)}</span>
-        <span>Alloc efficiency</span><span className="text-right font-mono">{eff.label}</span>
-      </div>
-    </div>
-  )
-}
-
 // ---------------------------------------------------------------------------
 // Benchmark scatter — secondary view (time vs allocs, quadrants)
 // ---------------------------------------------------------------------------
-
-function BenchmarkScatter({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
-  const colors = useThemeColors()
-  const svgRef = useRef<SVGSVGElement>(null)
-  const [tooltip, setTooltip] = useTooltip<BenchmarkResult>()
-
-  const categories = useMemo(() => {
-    const seen = new Set<string>()
-    for (const b of benchmarks) seen.add(inferCategory(b.name))
-    return Array.from(seen).sort()
-  }, [benchmarks])
-
-  const catColor = useMemo(() => seriesColorMap(categories, colors), [categories, colors])
-
-  useEffect(() => {
-    if (!benchmarks.length || !svgRef.current) return
-
-    const svg = d3.select(svgRef.current)
-    svg.selectAll('*').remove()
-
-    const width = svgRef.current.clientWidth
-    const height = Math.max(420, window.innerHeight * 0.45)
-    const pad = { top: 30, right: Math.round(Math.max(90, Math.min(140, width * 0.11))), bottom: 56, left: 64 }
-    const innerW = width - pad.left - pad.right
-    const innerH = height - pad.top - pad.bottom
-
-    svg.attr('viewBox', `0 0 ${width} ${height}`)
-
-    const maxTime = d3.max(benchmarks, (d) => d.time_per_op) || 1
-    const maxAllocs = d3.max(benchmarks, (d) => d.allocs_per_op) || 1
-
-    const xScale = d3.scaleLinear().domain([0, maxTime * 1.12]).range([0, innerW])
-    const yScale = d3.scaleLinear().domain([0, maxAllocs * 1.12]).range([innerH, 0])
-
-    const g = svg.append('g').attr('transform', `translate(${pad.left},${pad.top})`)
-
-    g.append('g').call(d3.axisLeft(yScale).ticks(8).tickSize(-innerW).tickFormat(() => '')).attr('stroke', colors.border)
-    g.append('g').call(d3.axisBottom(xScale).ticks(8).tickSize(innerH).tickFormat(() => ''))
-      .attr('transform', `translate(0,${innerH})`).attr('stroke', colors.border)
-
-    const xAxis = g.append('g').attr('transform', `translate(0,${innerH})`)
-      .call(d3.axisBottom(xScale).ticks(6).tickFormat((d) => fmtShortNS(d as number)))
-      .attr('color', colors.axis).attr('font-size', '11px')
-    xAxis.selectAll('.domain').attr('stroke', colors.border)
-    xAxis.selectAll('.tick line').attr('stroke', colors.border)
-
-    const yAxis = g.append('g').call(d3.axisLeft(yScale).ticks(6)).attr('color', colors.axis).attr('font-size', '11px')
-    yAxis.selectAll('.domain').attr('stroke', colors.border)
-    yAxis.selectAll('.tick line').attr('stroke', colors.border)
-
-    g.append('text').attr('x', innerW / 2).attr('y', innerH + 40)
-      .attr('text-anchor', 'middle').attr('font-size', '12px').attr('fill', colors.muted).text('Time / Op  →  slower')
-    g.append('text').attr('y', -46).attr('x', -(innerH / 2))
-      .attr('transform', 'rotate(-90)').attr('text-anchor', 'middle').attr('font-size', '12px')
-      .attr('fill', colors.muted).text('Allocs / Op  →  more')
-
-    const medTime = d3.median(benchmarks, (d) => d.time_per_op) || 0
-    const medAllocs = d3.median(benchmarks, (d) => d.allocs_per_op) || 0
-
-    g.append('line').attr('x1', xScale(medTime)).attr('x2', xScale(medTime)).attr('y1', 0).attr('y2', innerH)
-      .attr('stroke', colors.border).attr('stroke-dasharray', '4,4')
-    g.append('line').attr('x1', 0).attr('x2', innerW).attr('y1', yScale(medAllocs)).attr('y2', yScale(medAllocs))
-      .attr('stroke', colors.border).attr('stroke-dasharray', '4,4')
-
-    const qBadges = [
-      { x: innerW - 6, y: 4, anchor: 'end', label: '✦ Best', color: colors.good, desc: 'fast · low allocs' },
-      { x: 6, y: 4, anchor: 'start', label: '✘ Worst', color: colors.bad, desc: 'slow · alloc-heavy' },
-    ]
-    qBadges.forEach((qb) => {
-      g.append('text').attr('x', qb.x).attr('y', qb.y).attr('text-anchor', qb.anchor)
-        .attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', qb.color).text(qb.label)
-      g.append('text').attr('x', qb.x).attr('y', qb.y + 13).attr('text-anchor', qb.anchor)
-        .attr('font-size', '9px').attr('fill', colors.axis).text(qb.desc)
-    })
-
-    const rScale = d3.scaleSqrt().domain([0, d3.max(benchmarks, (d) => d.bytes_per_op) || 1]).range([4, 18])
-    const dotGroup = g.append('g')
-
-    benchmarks.forEach((d) => {
-      const cx = xScale(d.time_per_op)
-      const cy = yScale(d.allocs_per_op)
-      const r = Math.max(rScale(d.bytes_per_op), 5)
-      const cat = inferCategory(d.name)
-
-      dotGroup.append('circle').attr('cx', cx).attr('cy', cy).attr('r', r)
-        .attr('fill', catColor.get(cat) || colors.series[0])
-        .attr('opacity', 0.75).attr('stroke', colors.surface).attr('stroke-width', 1.5)
-        .style('cursor', 'pointer')
-        .on('mouseover', function (event: MouseEvent) {
-          d3.select(this).attr('opacity', 1).attr('stroke-width', 3)
-          const rect = svgRef.current!.getBoundingClientRect()
-          setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top - 10, data: d })
-        })
-        .on('mousemove', function (event: MouseEvent) {
-          const rect = svgRef.current!.getBoundingClientRect()
-          setTooltip((prev) => ({ ...prev, x: event.clientX - rect.left, y: event.clientY - rect.top - 10 }))
-        })
-        .on('mouseout', function () {
-          d3.select(this).attr('opacity', 0.75).attr('stroke-width', 1.5)
-          setTooltip({ x: 0, y: 0, data: null })
-        })
-
-      dotGroup.append('text').attr('x', cx + r + 5).attr('y', cy + 4)
-        .attr('font-size', '10px').attr('fill', colors.muted).style('pointer-events', 'none')
-        .style('text-shadow', `0 0 3px ${colors.surface}, 0 0 3px ${colors.surface}`)
-        .text(extractShortName(d.name))
-    })
-
-    // label overlap mitigation
-    const labelNodes: { x: number; y: number; el: d3.Selection<SVGTextElement, unknown, null, undefined> }[] = []
-    dotGroup.selectAll<SVGTextElement, unknown>('text').each(function () {
-      const el = d3.select(this)
-      labelNodes.push({ x: +el.attr('x'), y: +el.attr('y'), el })
-    })
-    for (let i = 1; i < labelNodes.length; i++) {
-      for (let j = 0; j < i; j++) {
-        if (Math.abs(labelNodes[i].x - labelNodes[j].x) < 40 && Math.abs(labelNodes[i].y - labelNodes[j].y) < 16) {
-          labelNodes[i].el.attr('y', labelNodes[i].y - 10)
-          labelNodes[i].y -= 10
-        }
-      }
-    }
-
-    const legG = svg.append('g').attr('transform', `translate(${width - pad.right + 12}, ${pad.top + 16})`)
-    legG.append('text').text('Category').attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', colors.axis)
-    categories.forEach((c, i) => {
-      const ly = (i + 1) * 20
-      legG.append('circle').attr('cx', 0).attr('cy', ly).attr('r', 5).attr('fill', catColor.get(categories[i]) ?? colors.other).attr('opacity', 0.8)
-      legG.append('text').attr('x', 12).attr('y', ly + 4).attr('font-size', '10px').attr('fill', colors.muted).text(c)
-    })
-    const sizeLegY = (categories.length + 2) * 20
-    legG.append('text').text('Bytes/Op').attr('font-size', '10px').attr('font-weight', 'bold').attr('fill', colors.axis).attr('y', sizeLegY)
-    ;[{ r: 5, label: '0 B' }, { r: 10, label: '~100 B' }, { r: 16, label: '~1 KB+' }].forEach((s, i) => {
-      const sy = sizeLegY + (i + 1) * 22
-      legG.append('circle').attr('cx', 0).attr('cy', sy).attr('r', s.r).attr('fill', colors.muted).attr('opacity', 0.5)
-      legG.append('text').attr('x', s.r + 8).attr('y', sy + 4).attr('font-size', '10px').attr('fill', colors.axis).text(s.label)
-    })
-  }, [benchmarks, categories, catColor, colors, setTooltip])
-
-  return (
-    <div className="relative">
-      <svg ref={svgRef} className="w-full" style={{ height: '45vh', minHeight: 420 }} />
-      <BenchTooltip tooltip={tooltip} />
-    </div>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // Profile: treemap of hottest functions (area = flat%, grouped by package)
@@ -583,51 +318,6 @@ function ProfileTable({ entries, maxFlat, unit }: { entries: ProfileEntry[] | nu
 // Benchmark reference table (full detail, sorted slow -> fast)
 // ---------------------------------------------------------------------------
 
-function BenchmarkTable({ benchmarks }: { benchmarks: BenchmarkResult[] }) {
-  const colors = useThemeColors()
-  const sorted = useMemo(() => [...benchmarks].sort((a, b) => b.time_per_op - a.time_per_op), [benchmarks])
-  const categories = useMemo(() => Array.from(new Set(benchmarks.map((b) => inferCategory(b.name)))).sort(), [benchmarks])
-  const catColor = useMemo(() => seriesColorMap(categories, colors), [categories, colors])
-
-  return (
-    <div className="overflow-x-auto bg-surface border border-line rounded-lg">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b border-line text-left text-fg-muted uppercase tracking-wide">
-            <th className="py-2 px-3 font-medium">Benchmark</th>
-            <th className="py-2 px-3 font-medium text-right">Time/Op</th>
-            <th className="py-2 px-3 font-medium text-right">Allocs</th>
-            <th className="py-2 px-3 font-medium text-right">Bytes</th>
-            <th className="py-2 px-3 font-medium text-right">Efficiency</th>
-            <th className="py-2 px-3 font-medium text-right">Iterations</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((b, i) => {
-            const cat = inferCategory(b.name)
-            const eff = allocEfficiency(b.allocs_per_op, b.bytes_per_op)
-            return (
-              <tr key={i} className="border-b border-line hover:bg-subtle transition-colors">
-                <td className="py-1.5 px-3">
-                  <div className="flex items-center gap-1.5 font-mono text-fg">
-                    <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor.get(cat) }} />
-                    <span className="truncate" title={b.name}>{b.name}</span>
-                  </div>
-                </td>
-                <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg">{fmtDuration(b.time_per_op)}</td>
-                <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg">{b.allocs_per_op}</td>
-                <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg">{fmtBytes(b.bytes_per_op)}</td>
-                <td className={`py-1.5 px-3 text-right font-medium ${eff.color}`}>{eff.label}</td>
-                <td className="py-1.5 px-3 text-right tabular-nums text-fg-muted">{b.iterations.toLocaleString()}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -651,14 +341,24 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
     if (!benchmarks || !benchmarks.length) return null
     const n = benchmarks.length
     const avgTime = benchmarks.reduce((s, b) => s + b.time_per_op, 0) / n
+    const medTime = median(benchmarks.map((b) => b.time_per_op))
     const avgAllocs = benchmarks.reduce((s, b) => s + b.allocs_per_op, 0) / n
     const slowest = benchmarks.reduce((a, b) => (a.time_per_op > b.time_per_op ? a : b))
     const heaviest = benchmarks.reduce((a, b) => (a.allocs_per_op > b.allocs_per_op ? a : b))
     const zeroAlloc = benchmarks.filter((b) => b.allocs_per_op === 0).length
-    return { n, avgTime, avgAllocs, slowest, heaviest, zeroAlloc }
+    return { n, avgTime, medTime, avgAllocs, slowest, heaviest, zeroAlloc }
   }, [benchmarks])
 
-  const activeEntries = profileTab === 'cpu' ? profile?.cpu : profile?.mem
+  // Runtime, GC and profiler frames are the cost of measuring, not of the
+  // code under test; they are hidden unless asked for.
+  const [showRuntime, setShowRuntime] = useState(false)
+  const rawEntries = profileTab === 'cpu' ? profile?.cpu : profile?.mem
+  const activeEntries = useMemo(() => {
+    if (!rawEntries) return rawEntries
+    return showRuntime ? rawEntries : rawEntries.filter((e) => !isRuntimeFrame(e.function))
+  }, [rawEntries, showRuntime])
+  const hiddenCount = (rawEntries?.length ?? 0) - (activeEntries?.length ?? 0)
+  const sources = useMemo(() => allocationSources(profile, projectName).slice(0, 6), [profile, projectName])
   const profileMaxFlat = useMemo(() => {
     if (!activeEntries) return 0
     return activeEntries.reduce((m, e) => (e.flat > m ? e.flat : m), 0)
@@ -694,18 +394,18 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           {stats && (
             <>
-              <StatCard label="Benchmarks" value={String(stats.n)} sub={`${stats.zeroAlloc} alloc-free`} />
-              <StatCard label="Avg time/op" value={fmtShortNS(stats.avgTime)} />
+              <StatCard label="Benchmarks" value={String(stats.n)} sub={`${stats.zeroAlloc} allocation-free · ${profile?.packages?.length ?? 0} packages profiled`} />
+              <StatCard label="Median time/op" value={fmtShortNS(stats.medTime)} sub={stats.avgTime > stats.medTime * 2 ? `mean ${fmtShortNS(stats.avgTime)}, pulled up by ${extractShortName(stats.slowest.name)}` : `mean ${fmtShortNS(stats.avgTime)}`} />
               <StatCard
                 label="Slowest"
                 value={fmtShortNS(stats.slowest.time_per_op)}
-                sub={extractShortName(stats.slowest.name)}
-                accent="text-danger "
+                sub={`${extractShortName(stats.slowest.name)} · ${stats.slowest.allocs_per_op} allocs/op`}
+                accent="text-danger"
               />
               <StatCard
-                label="Most Allocations"
+                label="Most allocations"
                 value={`${stats.heaviest.allocs_per_op}/op`}
-                sub={extractShortName(stats.heaviest.name)}
+                sub={`${extractShortName(stats.heaviest.name)} · ${fmtBytes(stats.heaviest.bytes_per_op)} per op`}
                 accent={stats.heaviest.allocs_per_op > 0 ? 'text-orange' : undefined}
               />
             </>
@@ -714,7 +414,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
             <StatCard
               label={`Hottest (${profileTab.toUpperCase()})`}
               value={`${hottest.flat_pct.toFixed(1)}%`}
-              sub={extractFnShort(hottest.function)}
+              sub={fnShort(hottest.function)}
               accent="text-danger "
             />
           )}
@@ -735,16 +435,25 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
             }
           />
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-            <ChartCard title="Ranking by Time/Op" caption="Bar length = time per op · color = allocations (green → red)">
-              <BenchmarkBars benchmarks={benchmarks!} />
-            </ChartCard>
-            <ChartCard title="Time vs Allocations" caption="X = time, Y = allocs, bubble size = bytes/op. Bottom-right is the danger zone.">
-              <BenchmarkScatter benchmarks={benchmarks!} />
-            </ChartCard>
-          </div>
+          <Bottlenecks benchmarks={benchmarks!} profile={profile} projectName={projectName} />
 
-          <BenchmarkTable benchmarks={benchmarks!} />
+          {sources.length > 0 && (
+            <div className="card mt-6">
+              <div className="px-4 py-3 border-b border-line">
+                <h3 className="text-[15px] font-semibold">Allocation sources in your code</h3>
+                <p className="text-xs text-fg-subtle">Project functions by share of their package's memory profile (self, excluding callees).</p>
+              </div>
+              <ul className="px-4 py-3 space-y-1.5">
+                {sources.map((src) => (
+                  <li key={src.pkg + src.fn} className="grid grid-cols-[minmax(0,1fr)_8rem_3.5rem] items-center gap-3 text-sm">
+                    <span className="font-mono text-[13px] truncate" title={src.fn}>{src.short}</span>
+                    <span className="h-2 bg-subtle rounded-full overflow-hidden"><span className="block h-full bg-violet rounded-full" style={{ width: `${Math.min(100, src.pct)}%` }} /></span>
+                    <span className="font-mono text-xs tabular-nums text-right text-fg-muted">{src.pct.toFixed(1)}%</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
 
@@ -762,8 +471,8 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
             }
           />
 
-          {/* CPU/Memory toggle */}
-          <div className="inline-flex rounded-lg border border-line p-0.5 mb-4 bg-subtle">
+          <div className="flex flex-wrap items-center gap-4 mb-4">
+          <div className="inline-flex rounded-lg border border-line p-0.5 bg-subtle">
             {hasCpu && (
               <button
                 onClick={() => setProfileTab('cpu')}
@@ -780,6 +489,14 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
                 Memory
               </button>
             )}
+          </div>
+            <label className="inline-flex items-center gap-2 text-xs text-fg-muted cursor-pointer">
+              <input type="checkbox" checked={showRuntime} onChange={(e) => setShowRuntime(e.target.checked)} className="w-3.5 h-3.5" />
+              Show runtime frames{hiddenCount > 0 && !showRuntime ? ` (${hiddenCount} hidden)` : ''}
+            </label>
+            <p className="text-xs text-fg-subtle">
+              Runtime, GC and profiler frames are the cost of measuring. Shares are of each package's own profile, so they don't sum to 100%.
+            </p>
           </div>
 
           {activeEntries && activeEntries.length > 0 ? (
@@ -798,7 +515,7 @@ export default function Performance({ benchmarks, profile, onScan, scanning, pro
               </div>
             </div>
           ) : (
-            <p className="text-sm text-fg-muted italic">No {profileTab === 'cpu' ? 'CPU' : 'memory'} profile data collected.</p>
+            <p className="text-sm text-fg-muted italic">{hiddenCount > 0 ? `Only runtime frames in this profile (${hiddenCount} hidden).` : `No ${profileTab === 'cpu' ? 'CPU' : 'memory'} profile data collected.`}</p>
           )}
         </section>
       )}

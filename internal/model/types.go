@@ -205,7 +205,10 @@ func MergeToolStatus(lists ...[]ToolStatus) []ToolStatus {
 }
 
 type BenchmarkResult struct {
-	Name        string        `json:"name"`
+	Name string `json:"name"`
+	// Package is the import path the benchmark ran in, which links it to
+	// that package's profile.
+	Package     string        `json:"package,omitempty"`
 	Iterations  int           `json:"iterations"`
 	TimePerOp   time.Duration `json:"time_per_op"`
 	BytesPerOp  int64         `json:"bytes_per_op"`
@@ -215,6 +218,17 @@ type BenchmarkResult struct {
 type ProfileData struct {
 	CPU []ProfileEntry `json:"cpu,omitempty"`
 	Mem []ProfileEntry `json:"mem,omitempty"`
+	// Packages keeps each package's profile apart. CPU and Mem above merge
+	// them, which is handy for a top list but loses which benchmark a frame
+	// belongs to.
+	Packages []PackageProfile `json:"packages,omitempty"`
+}
+
+// PackageProfile is the CPU and memory profile of one package's benchmarks.
+type PackageProfile struct {
+	Package string         `json:"package"`
+	CPU     []ProfileEntry `json:"cpu,omitempty"`
+	Mem     []ProfileEntry `json:"mem,omitempty"`
 }
 
 type ProfileEntry struct {

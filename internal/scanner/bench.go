@@ -89,9 +89,14 @@ func (s *BenchmarkScanner) Run(ctx context.Context, cfg *config.Config, progress
 
 func parseBenchOutput(output string) []model.BenchmarkResult {
 	var results []model.BenchmarkResult
+	pkg := ""
 	scanner := bufio.NewScanner(strings.NewReader(output))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
+		if m := benchPkgLineRe.FindStringSubmatch(line); m != nil {
+			pkg = m[1]
+			continue
+		}
 		matches := benchRe.FindStringSubmatch(line)
 		if matches == nil {
 			continue
@@ -103,6 +108,7 @@ func parseBenchOutput(output string) []model.BenchmarkResult {
 
 		r := model.BenchmarkResult{
 			Name:       name,
+			Package:    pkg,
 			Iterations: iterations,
 			TimePerOp:  time.Duration(nsPerOp) * time.Nanosecond,
 		}

@@ -181,6 +181,7 @@ func RunWorkspaceScan(ctx context.Context, cfg *config.Config, progress chan<- P
 			}
 			combined.Profile.CPU = append(combined.Profile.CPU, result.Profile.CPU...)
 			combined.Profile.Mem = append(combined.Profile.Mem, result.Profile.Mem...)
+			combined.Profile.Packages = append(combined.Profile.Packages, result.Profile.Packages...)
 		}
 		if result.DepGraph != nil {
 			if combined.DepGraph == nil {
