@@ -31,6 +31,9 @@ func NewGitIgnoreFilter(projectDir string) PathFilter {
 		if rel == "." || strings.HasPrefix(rel, "..") {
 			return false
 		}
+		if skipByName(path) {
+			return true
+		}
 		cmd := exec.Command("git", "check-ignore", "-q", rel)
 		cmd.Dir = projectDir
 		return cmd.Run() == nil
@@ -38,14 +41,18 @@ func NewGitIgnoreFilter(projectDir string) PathFilter {
 }
 
 func defaultSkipFilter() PathFilter {
-	return func(path string) bool {
-		base := filepath.Base(path)
-		if base == "." || base == ".." {
-			return false
-		}
-		if strings.HasPrefix(base, ".") {
-			return true
-		}
-		return base == "node_modules" || base == "vendor" || base == "dist"
+	return skipByName
+}
+
+// skipByName reports whether a directory should be skipped based on its name
+// alone: hidden directories, node_modules, vendor and dist.
+func skipByName(path string) bool {
+	base := filepath.Base(path)
+	if base == "." || base == ".." {
+		return false
 	}
+	if strings.HasPrefix(base, ".") {
+		return true
+	}
+	return base == "node_modules" || base == "vendor" || base == "dist"
 }
