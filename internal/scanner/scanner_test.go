@@ -679,3 +679,77 @@ func TestPipelineFilterEnabled(t *testing.T) {
 		t.Errorf("expected [lint git], got %v", names)
 	}
 }
+
+func TestComplexityScanner_MethodIDsIncludeReceiver(t *testing.T) {
+	dir := t.TempDir()
+	body := strings.Repeat("\tif x > 0 {\n\t}\n", 11)
+	src := "package p\n\ntype A struct{}\ntype B struct{}\n\n" +
+		"func (a *A) update(x int) {\n" + body + "}\n\n" +
+		"func (b B) update(x int) {\n" + body + "}\n\n" +
+		"func update(x int) {\n" + body + "}\n"
+	if err := os.WriteFile(filepath.Join(dir, "p.go"), []byte(src), 0600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	scanner := &ComplexityScanner{Threshold: 10}
+	cfg := &config.Config{TargetDir: dir}
+
+	progress := make(chan ProgressEvent, 10)
+	drainProgress(progress)
+	defer close(progress)
+
+	result, err := scanner.Run(context.Background(), cfg, progress)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if len(result.Issues) != 3 {
+		t.Fatalf("expected 3 issues, got %d", len(result.Issues))
+	}
+
+	byID := map[string]model.Issue{}
+	for _, issue := range result.Issues {
+		byID[issue.ID] = issue
+	}
+	if len(byID) != 3 {
+		t.Fatalf("expected 3 distinct ids, got %d", len(byID))
+	}
+
+	for id, wantMsg := range map[string]string{
+		"complexity-p.go-A.update": "Function A.update has ",
+		"complexity-p.go-B.update": "Function B.update has ",
+		"complexity-p.go-update":   "Function update has ",
+	} {
+		issue, ok := byID[id]
+		if !ok {
+			t.Errorf("missing issue id %q", id)
+			continue
+		}
+		if !strings.HasPrefix(issue.Message, wantMsg) {
+			t.Errorf("id %q: message %q does not start with %q", id, issue.Message, wantMsg)
+		}
+	}
+}
+
+func TestReceiverName(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "test.go", `package p
+type Box[T any] struct{}
+type Pair[K, V any] struct{}
+func plain() {}
+func (b *Box[T]) a() {}
+func (p Pair[K, V]) b() {}
+`, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	want := map[string]string{"plain": "", "a": "Box", "b": "Pair"}
+	for _, decl := range f.Decls {
+		fd, ok := decl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		if got := receiverName(fd); got != want[fd.Name.Name] {
+			t.Errorf("%s: receiverName = %q, want %q", fd.Name.Name, got, want[fd.Name.Name])
+		}
+	}
+}

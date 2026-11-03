@@ -75,14 +75,18 @@ func (s *ComplexityScanner) Run(ctx context.Context, cfg *config.Config, progres
 			comp := computeComplexity(funcDecl)
 			if comp > threshold {
 				pos := fset.Position(funcDecl.Pos())
+				name := funcDecl.Name.Name
+				if recv := receiverName(funcDecl); recv != "" {
+					name = recv + "." + name
+				}
 				allIssues = append(allIssues, model.Issue{
-					ID:        fmt.Sprintf("complexity-%s-%s", relPath, funcDecl.Name.Name),
+					ID:        fmt.Sprintf("complexity-%s-%s", relPath, name),
 					Scanner:   "complexity",
 					Rule:      "high-complexity",
 					Severity:  model.SeverityWarning,
 					File:      relPath,
 					Line:      pos.Line,
-					Message:   fmt.Sprintf("Function %s has cyclomatic complexity of %d (threshold: %d)", funcDecl.Name.Name, comp, threshold),
+					Message:   fmt.Sprintf("Function %s has cyclomatic complexity of %d (threshold: %d)", name, comp, threshold),
 					Category:  model.CategoryComplexity,
 					Value:     comp,
 					Threshold: threshold,
@@ -98,6 +102,27 @@ func (s *ComplexityScanner) Run(ctx context.Context, cfg *config.Config, progres
 
 	t.completedf("Found %d complex functions", len(allIssues))
 	return &Result{ScannerName: s.Name(), Duration: time.Since(start), Issues: allIssues}, nil
+}
+
+// receiverName returns the base type name of fd's receiver, or "" for plain functions.
+func receiverName(fd *ast.FuncDecl) string {
+	if fd.Recv == nil || len(fd.Recv.List) == 0 {
+		return ""
+	}
+	expr := fd.Recv.List[0].Type
+	if star, ok := expr.(*ast.StarExpr); ok {
+		expr = star.X
+	}
+	switch t := expr.(type) {
+	case *ast.IndexExpr:
+		expr = t.X
+	case *ast.IndexListExpr:
+		expr = t.X
+	}
+	if ident, ok := expr.(*ast.Ident); ok {
+		return ident.Name
+	}
+	return ""
 }
 
 func computeComplexity(funcDecl *ast.FuncDecl) int {
