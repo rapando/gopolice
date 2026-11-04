@@ -1,10 +1,14 @@
 package scanner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -139,53 +143,123 @@ func (s *SecurityScanner) runGovulncheck(ctx context.Context, projectDir string)
 	return parseGovulncheckOutput(output)
 }
 
-type govulncheckOutput struct {
-	Vulns []govulncheckVuln `json:"vulns"`
-}
-
-type govulncheckVuln struct {
-	OSVs    []govulncheckOSV `json:"osvs"`
-	Modules []govulncheckMod `json:"modules"`
-	Title   string           `json:"title"`
+// govulncheckMessage is one top-level object in the govulncheck v1 JSON
+// stream. Exactly one field is set per object; other keys (config, progress,
+// SBOM, ...) are ignored.
+type govulncheckMessage struct {
+	OSV     *govulncheckOSV     `json:"osv"`
+	Finding *govulncheckFinding `json:"finding"`
 }
 
 type govulncheckOSV struct {
-	ID string `json:"id"`
+	ID      string `json:"id"`
+	Summary string `json:"summary"`
 }
 
-type govulncheckMod struct {
-	Path string `json:"path"`
+type govulncheckFinding struct {
+	OSV          string             `json:"osv"`
+	FixedVersion string             `json:"fixed_version"`
+	Trace        []govulncheckFrame `json:"trace"`
 }
 
+type govulncheckFrame struct {
+	Module   string               `json:"module"`
+	Version  string               `json:"version"`
+	Package  string               `json:"package"`
+	Function string               `json:"function"`
+	Receiver string               `json:"receiver"`
+	Position *govulncheckPosition `json:"position"`
+}
+
+type govulncheckPosition struct {
+	Filename string `json:"filename"`
+	Line     int    `json:"line"`
+	Column   int    `json:"column"`
+}
+
+// isSymbolLevel reports whether the finding reaches a vulnerable symbol, as
+// opposed to only requiring the vulnerable module.
+func (f *govulncheckFinding) isSymbolLevel() bool {
+	for _, fr := range f.Trace {
+		if fr.Function != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// parseGovulncheckOutput decodes the govulncheck v1 JSON stream and returns
+// one issue per OSV id that has at least one symbol-level finding.
 func parseGovulncheckOutput(data []byte) ([]model.Issue, error) {
-	var parsed govulncheckOutput
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		return nil, fmt.Errorf("parse govulncheck output: %w", err)
+	summaries := map[string]string{}
+	firstFinding := map[string]*govulncheckFinding{}
+
+	dec := json.NewDecoder(bytes.NewReader(data))
+	for {
+		var msg govulncheckMessage
+		if err := dec.Decode(&msg); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, fmt.Errorf("parse govulncheck output: %w", err)
+		}
+		if msg.OSV != nil && msg.OSV.ID != "" {
+			summaries[msg.OSV.ID] = msg.OSV.Summary
+		}
+		if f := msg.Finding; f != nil && f.OSV != "" && len(f.Trace) > 0 && f.isSymbolLevel() {
+			if _, seen := firstFinding[f.OSV]; !seen {
+				firstFinding[f.OSV] = f
+			}
+		}
 	}
 
-	var issues []model.Issue
-	for _, v := range parsed.Vulns {
-		vulnID := ""
-		if len(v.OSVs) > 0 {
-			vulnID = v.OSVs[0].ID
+	ids := make([]string, 0, len(firstFinding))
+	for id := range firstFinding {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	issues := make([]model.Issue, 0, len(ids))
+	for _, id := range ids {
+		f := firstFinding[id]
+		module := f.Trace[0].Module
+
+		file, line, col := module, 0, 0
+		if pos := f.Trace[len(f.Trace)-1].Position; pos != nil && pos.Filename != "" {
+			file, line, col = pos.Filename, pos.Line, pos.Column
 		}
-		modPath := ""
-		if len(v.Modules) > 0 {
-			modPath = v.Modules[0].Path
+
+		msg, ok := summaries[id]
+		if !ok || msg == "" {
+			msg = fmt.Sprintf("%s in %s", id, module)
 		}
 
 		issues = append(issues, model.Issue{
-			ID:       fmt.Sprintf("govulncheck-%s", vulnID),
+			ID:       fmt.Sprintf("govulncheck-%s", id),
 			Scanner:  "govulncheck",
-			Rule:     vulnID,
+			Rule:     id,
 			Severity: model.SeverityError,
-			Message:  v.Title,
-			File:     modPath,
+			Message:  msg,
+			File:     file,
+			Line:     line,
+			Column:   col,
 			Category: model.CategorySecurity,
-			Solution: fmt.Sprintf("Update the affected module to a patched version. Run `go get -u %s` and check %s for details.", modPath, vulnID),
+			Solution: govulncheckSolution(id, module, f.FixedVersion),
 		})
 	}
 	return issues, nil
+}
+
+func govulncheckSolution(id, module, fixed string) string {
+	ref := fmt.Sprintf("See https://pkg.go.dev/vuln/%s.", id)
+	if fixed == "" {
+		return "No fixed version yet. " + ref
+	}
+	target := module
+	if module == "stdlib" {
+		target = "Go"
+	}
+	return fmt.Sprintf("Update %s to %s or later. %s", target, fixed, ref)
 }
 
 func gosecSolution(ruleID string) string {
