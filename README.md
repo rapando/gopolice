@@ -178,6 +178,14 @@ The web UI listens on localhost only, and its API rejects requests from other or
 
 If your project has a `go.work` file, gopolice automatically detects it and runs all scanners against each module in the workspace. Results are aggregated into a single report, and issues are tagged with their module name. Use the **Module** group option in the Issues page to filter by module.
 
+## Agent skill
+
+`skill/` contains an agent skill (a `SKILL.md` plus a triage script) that
+teaches AI coding assistants to run gopolice headless, triage the JSON report
+and verify fixes with a rescan. Run `make skill` to package it as
+`bin/gopolice-skill.zip` for distribution. Buyer-facing documentation is in
+[docs/agensi-skill.md](docs/agensi-skill.md).
+
 ## Development
 
 ```bash
